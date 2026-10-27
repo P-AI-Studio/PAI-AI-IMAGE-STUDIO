@@ -1954,11 +1954,11 @@ def test_realesrgan_pair_repair_runs_before_network_fallback():
 def test_github_release_files_and_dependency_declarations_exist():
     required = [
         "README.md", "README_FA.md", "CHANGELOG.md", "VERSION", "LICENSE",
-        "CONTRIBUTING.md", "SECURITY.md", "pai_studio/__init__.py",
+        "SECURITY.md", "pai_ai_image_studio.py", "pai_studio/__init__.py",
         "pai_studio/validation.py", "requirements.txt", "requirements-build.txt",
-        "requirements-test.txt", ".github/workflows/tests.yml",
-        ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/bug_report.yml",
-        ".github/ISSUE_TEMPLATE/feature_request.yml",
+        "requirements-test.txt", ".gitignore", ".github/workflows/tests.yml",
+        ".github/workflows/windows-release.yml", "Build_Windows_Installer.bat",
+        "build_release.ps1", "installer.iss", "licenses/THIRD_PARTY_NOTICES.txt",
     ]
     for relative in required:
         assert (ROOT / relative).is_file(), f"Missing release file: {relative}"
