@@ -111,9 +111,9 @@ def test_model_catalog_includes_curated_uncensored_and_convrot_publishers():
     assert any("madebyollin/texture-fix-vae-for-qwen-image-2.1" in u for u in vae_urls)
 
 
-def test_ultimate_always_covers_full_canvas_with_exact_four_quadrants():
+def test_ultimate_always_covers_full_canvas_with_adaptive_tile_grid():
     engine = LocalEngine()
-    for coverage in (0.45, 0.50, 0.75):
+    for coverage, expected_tiles in ((0.45, 9), (0.50, 4), (0.75, 4)):
         engine._active_ultimate_tile_coverage = coverage
         engine._active_ultimate_refinement_passes = 1
         engine._active_ultimate_steps = 8
@@ -132,9 +132,10 @@ def test_ultimate_always_covers_full_canvas_with_exact_four_quadrants():
             detail_profile="balanced", force=True,
         )
         assert out.size == (2048, 2048)
-        assert len(crops) == 4
-        # Bottom-right corner must have been refined by the 4th quadrant
-        assert out.getpixel((2047, 2047)) != (80, 90, 100)
+        assert len(crops) == expected_tiles
+        # Every corner and the center must be covered by the generated Tile grid.
+        for point in ((0, 0), (2047, 0), (0, 2047), (2047, 2047), (1024, 1024)):
+            assert out.getpixel(point) != (80, 90, 100)
 
 
 def test_resolve_closeup_grounding_gguf_pair_discovers_installed_gguf_and_mmproj(tmp_path: Path):
@@ -423,6 +424,10 @@ def test_ultimate_half_res_lanczos_pipeline_when_on_and_disabled_when_off(tmp_pa
             return Image.new("RGB", size, (130, 140, 150))
 
         eng._infer_with_auto_offload_retry = fake_inf
+        # Unit tests replace the learned NCNN backend so no model/runtime download is attempted.
+        eng._upscale_image_with_selected_model = (
+            lambda image, options, target_size: image.resize(target_size, Image.Resampling.BICUBIC)
+        )
         job = Job(
             workflow="lora_closeup_1024",
             input_path=str(src_path),
