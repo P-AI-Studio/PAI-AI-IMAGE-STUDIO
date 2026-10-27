@@ -1934,7 +1934,7 @@ class App(QMainWindow):
     def download_model_bundle(self) -> bool:
         if self.worker and self.worker.isRunning():
             QMessageBox.information(self, "Processing active", "Stop image processing before downloading or repairing model files.")
-            return
+            return False
         if self.model_worker and self.model_worker.isRunning():
             QMessageBox.information(self, "Model loading", "Wait for model loading to finish before downloading or repairing model files.")
             return
