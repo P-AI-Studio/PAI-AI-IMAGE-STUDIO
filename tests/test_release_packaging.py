@@ -51,16 +51,16 @@ def test_windows_release_workflow_builds_directly_and_runs_on_pull_requests():
     assert "SHA-256: $digest" in workflow
 
 
-def test_publish_script_never_force_pushes_or_rewrites_existing_release_tags():
-    script = (ROOT / "Publish_To_GitHub.bat").read_text(encoding="utf-8")
-    assert "--force" not in script.lower()
-    assert "git tag -f" not in script.lower()
-    assert "RELEASE_NOTES.md" not in script
-    assert 'if not exist ".git"' in script
-    assert "git push -u origin main" not in script
-    assert "Remote tag %TAG% already exists" in script
-    assert "git status --porcelain" in script
-    assert "git rev-parse origin/main" in script
+def test_release_publishing_uses_version_tags_and_keeps_build_output_out_of_git():
+    workflow = (ROOT / ".github/workflows/windows-release.yml").read_text(encoding="utf-8")
+    ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+
+    assert 'push:' in workflow and 'tags:' in workflow and '"v*"' in workflow
+    assert "softprops/action-gh-release@v2" in workflow
+    assert "files: dist-installer/PAI-AI-Image-Studio-Setup-*.exe" in workflow
+    for pattern in ("build/", "dist/", "dist-installer/", ".build-cache/"):
+        assert pattern in ignore
+    assert not (ROOT / "Publish_To_GitHub.bat").exists()
 
 
 def test_installer_filename_uses_the_version_file():
