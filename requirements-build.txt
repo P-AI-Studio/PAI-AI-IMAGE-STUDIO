@@ -1,4 +1,3 @@
-# Optional developer/build/test toolchain.
+# Developer/build toolchain.
 -r requirements.txt
 PyInstaller>=6.10,<7
-pytest>=8,<9

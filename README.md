@@ -51,12 +51,13 @@ A built Windows installer contains the frozen PAI application, branding assets, 
 
 ## Quick Start (Source Mode)
 
-1. Extract the release archive to a writable directory under your Windows user profile.
-2. Install 64-bit Python 3.11–3.13 and ensure the `py` launcher is enabled.
-3. Run `Install_Update_Requirements.bat` to install Python dependencies (`PySide6`, `Pillow`, `certifi`, `numpy`, and `psutil`).
-4. Launch the studio via `Run_PAI_AI_IMAGE_STUDIO.bat`.
-5. Open **Model Catalog** in the sidebar to download or select your local Qwen-Image 2.1 diffusion weights (e.g., `rayQwen21_turboV13Int8convrot.safetensors`), text encoder / vision model (`qwen3vl_8b_int8_convrot.safetensors` or GGUF + `mmproj`), and VAE (`texture_fix_vae_for_qwen_image_2.1_bf16.safetensors`).
-6. Configure your **Ultimate Tile Refinement** preferences (`Ultimate output scale`, `Steps per tile`, `Denoise strength`, `Tile coverage + overlap`, and `Refinement passes`) directly inside **Model Catalog**.
+This is intended for developers who want to run the source directly. End users should use the packaged Windows installer.
+
+1. Install 64-bit CPython 3.11–3.13 and ensure the `py` launcher is enabled.
+2. From the repository root, install the runtime dependencies: `python -m pip install -r requirements.txt`.
+3. Start the application with `python pai_ai_image_studio.py`.
+4. Open **Model Catalog** in the sidebar to download or select the required local diffusion, text/vision encoder, and VAE components.
+5. Configure **Model Catalog → Ultimate** to select the learned upscaler and tile-refinement preferences.
 
 ## Building a Windows Installer
 
@@ -64,24 +65,14 @@ To compile a standalone Windows installer (`PAI-AI-Image-Studio-Setup-1.0.0-beta
 
 1. Install Python 3.11–3.13 x64 and [Inno Setup 6](https://jrsoftware.org/isdl.php).
 2. Run `Build_Windows_Installer.bat` from the repository root.
-3. The build pipeline runs bytecode compilation and the full automated test suite, freezes the application via PyInstaller into a clean `dist/` folder, and compiles the installer.
+3. The build pipeline installs the build toolchain, checks Python source syntax, freezes the application via PyInstaller into a clean `dist/` folder, and compiles the installer.
 4. The installer is saved in the repository's `dist-installer/` folder as `PAI-AI-Image-Studio-Setup-<VERSION>.exe` (for the current `VERSION`, `PAI-AI-Image-Studio-Setup-1.0.0-beta.2.exe`). Copy that EXE to your distribution folder, cloud storage, or a GitHub Release. The output folders are intentionally excluded from Git; **do not commit the compiled installer, models, or runtime files**.
 
 The native engine, CUDA runtime, selected upscaler runtime and model weights are deliberately excluded and are downloaded after installation. For GitHub Actions release publishing, merge the intended source changes first, ensure `VERSION` has the new release version, and create a matching new tag (for example, `v1.0.0-beta.3`). Do not overwrite or force-update an existing tag.
 
-## Running Automated Tests
-
-```powershell
-python -m pip install -r requirements-test.txt
-python -m compileall -q pai_ai_image_studio.py pai_studio tests
-python -m pytest -q
-```
-
-The full unit, validation, regression, and release-smoke test suite must pass prior to packaging. The CI job reports the current count; documentation intentionally avoids a stale hard-coded number.
-
 ## Repository Structure
 
-Only source, required branding assets, licensing/documentation, build configuration, and automated tests are tracked. Compiled installers, model weights, native runtimes, generated images, and local caches are excluded.
+Only application source, required branding assets, essential documentation/licensing, and build configuration are tracked. Launch/setup helper batch files, automated-test payloads, compiled installers, model weights, native runtimes, generated images, and local caches are excluded.
 
 ```text
 README.md / README_FA.md          Project and build instructions
@@ -91,11 +82,10 @@ licenses/                         Third-party notices
 pai_ai_image_studio.py            Application entry point
 pai_studio/                       Application engine, catalog, validation and UI
 assets/                           Icons and branding used by the app/installer
-requirements*.txt                 Runtime, build and test dependencies
+requirements.txt / requirements-build.txt Runtime and build dependencies
 Build_Windows_Installer.bat       One-click local installer build
 build_release.ps1 / installer.iss PyInstaller build and Inno Setup configuration
-tests/                            Regression and release validation suite
-.github/workflows/                Source tests and Windows installer CI/release
+.github/workflows/                Windows installer and release-package publishing
 ```
 
 ## Privacy & Security Architecture

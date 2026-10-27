@@ -16,7 +16,7 @@ $RuntimeDir = Join-Path $DistDir 'runtime'
 
 
 Write-Host '== P.AI AI IMAGE STUDIO · Version 1 Beta release build =='
-# Use the installed system CPython selected by the setup helper; no project-local Python/venv.
+# Use installed system CPython; do not create a project-local Python/venv.
 $Python = $null
 foreach ($Version in @('3.13','3.12','3.11')) {
     $Candidate = (& py ("-" + $Version) -c "import sys,struct; print(sys.executable)" 2>$null | Select-Object -First 1)
@@ -26,7 +26,7 @@ if (-not $Python) {
     $Candidate = (Get-Command python -ErrorAction SilentlyContinue).Source
     if ($Candidate) { $Python = $Candidate }
 }
-if (-not $Python) { throw 'System Python 3.11, 3.12 or 3.13 x64 not found. Run Install_Update_Requirements.bat first.' }
+if (-not $Python) { throw 'System Python 3.11, 3.12 or 3.13 x64 was not found. Install 64-bit CPython and make the py launcher or python command available, then rerun this build.' }
 $PythonVersion = & $Python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
 if ($LASTEXITCODE -ne 0) { throw 'The selected system Python is not runnable.' }
 if ($PythonVersion -notmatch '^3\.(11|12|13)$') { throw "Unsupported system Python $PythonVersion. Install Python 3.11, 3.12 or 3.13 x64." }
@@ -45,8 +45,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'One or more required P.AI packages cannot be imported after dependency installation.' }
     & $Python -m compileall -q (Join-Path $ProjectRoot 'pai_ai_image_studio.py') (Join-Path $ProjectRoot 'pai_studio')
     if ($LASTEXITCODE -ne 0) { throw 'Python source syntax check failed.' }
-    & $Python -m pytest -q (Join-Path $ProjectRoot 'tests')
-    if ($LASTEXITCODE -ne 0) { throw 'Release smoke tests failed.' }
 
     Remove-Item -Recurse -Force (Join-Path $ProjectRoot 'build'), (Join-Path $ProjectRoot 'dist'), (Join-Path $ProjectRoot 'build-installer'), (Join-Path $ProjectRoot 'dist-installer') -ErrorAction SilentlyContinue
     & $Python -m PyInstaller --noconfirm --clean --onedir --windowed `

@@ -1,11 +1,11 @@
-name: Build Windows installer
+name: Build Windows installer and source package
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
   push:
+    # Temporary publishing trigger, guarded by the commit subject below.
+    branches:
+      - fix/release-packaging-beta-2
     tags:
       - "v*"
 
@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
@@ -25,7 +27,6 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-build.txt
-            requirements-test.txt
       - name: Verify release tag matches VERSION
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
@@ -38,7 +39,7 @@ jobs:
         run: choco install innosetup --yes --no-progress
       - name: Build app and installer
         shell: pwsh
-        run: .\build_release.ps1
+        run: .\\build_release.ps1
       - name: Verify installer output
         shell: pwsh
         run: |
@@ -54,18 +55,67 @@ jobs:
           }
           Write-Host "Installer: $($setup.Name)"
           Write-Host "SHA-256: $digest"
-      - name: Upload setup artifact
+      - name: Package the curated source tree
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $sourceZip = Join-Path "dist-installer" "PAI-AI-Image-Studio-Source-$version.zip"
+          $includePaths = @(
+            "README.md",
+            "README_FA.md",
+            "CHANGELOG.md",
+            "LICENSE",
+            "SECURITY.md",
+            "VERSION",
+            ".gitignore",
+            ".gitattributes",
+            ".editorconfig",
+            "Build_Windows_Installer.bat",
+            "build_release.ps1",
+            "installer.iss",
+            "requirements.txt",
+            "requirements-build.txt",
+            "pai_ai_image_studio.py",
+            "pai_studio",
+            "assets",
+            "licenses"
+          )
+          $archiveArgs = @("archive", "--format=zip", "--prefix=PAI-AI-Image-Studio-Source/", "--output=$sourceZip", $env:GITHUB_SHA, "--") + $includePaths
+          & git @archiveArgs
+          if ($LASTEXITCODE -ne 0) { throw "Failed to create curated source ZIP." }
+          $digest = (Get-FileHash -Algorithm SHA256 $sourceZip).Hash.ToLowerInvariant()
+          $hashFile = "$sourceZip.sha256"
+          "$digest  $(Split-Path -Leaf $sourceZip)" | Set-Content -Encoding ascii $hashFile
+          Write-Host "Source package: $sourceZip"
+          Write-Host "Source SHA-256: $digest"
+      - name: Upload release build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: PAI-AI-Image-Studio-Windows-Setup
-          path: dist-installer/PAI-AI-Image-Studio-Setup-*.exe
+          name: PAI-AI-Image-Studio-Release-Package
+          path: |
+            dist-installer/PAI-AI-Image-Studio-Setup-*.exe
+            dist-installer/PAI-AI-Image-Studio-Source-*.zip
+            dist-installer/PAI-AI-Image-Studio-Source-*.zip.sha256
           if-no-files-found: error
           retention-days: 30
-      - name: Publish GitHub release asset for version tags
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Determine release metadata
+        id: release-meta
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $tag = "v$version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag_name=$tag" >> $env:GITHUB_OUTPUT
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'push' && github.ref == 'refs/heads/fix/release-packaging-beta-2' && startsWith(github.event.head_commit.message, 'Prepare minimal source and publish beta.2 package'))
         uses: softprops/action-gh-release@v2
         with:
-          name: P.AI AI Image Studio ${{ github.ref_name }}
+          tag_name: ${{ steps.release-meta.outputs.tag_name }}
+          target_commitish: ${{ github.sha }}
+          name: P.AI AI Image Studio v${{ steps.release-meta.outputs.version }}
           generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
-          files: dist-installer/PAI-AI-Image-Studio-Setup-*.exe
+          prerelease: ${{ contains(steps.release-meta.outputs.version, 'alpha') || contains(steps.release-meta.outputs.version, 'beta') || contains(steps.release-meta.outputs.version, 'rc') }}
+          files: |
+            dist-installer/PAI-AI-Image-Studio-Setup-*.exe
+            dist-installer/PAI-AI-Image-Studio-Source-*.zip
+            dist-installer/PAI-AI-Image-Studio-Source-*.zip.sha256
