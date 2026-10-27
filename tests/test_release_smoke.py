@@ -754,7 +754,7 @@ def test_selected_upscaler_is_local_and_supports_official_and_pinned_community_m
     assert 'def _ensure_upscayl_runtime(self)' in source
     assert 'def _ensure_upscayl_model_pair(self, exe: Path, model_name: str)' in source
     assert 'def _git_blob_sha1(path: Path)' in source
-    assert 'self._ensure_upscayl_model_pair(executable, self.model_name)' in worker
+    assert 'self.engine._ensure_upscayl_model_pair(executable, self.model_name)' in worker
     assert 'self.realesrgan_box = QGroupBox("Ultimate · Selected AI Upscaler Model")' in source
     assert 'Run Selected Upscaler' in source
     assert 'upscale_page.addWidget(esrgan_card)' not in (ROOT / "pai_studio" / "ui" / "dialogs.py").read_text(encoding="utf-8")
