@@ -3,24 +3,21 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 echo ============================================================================
-echo   P.AI AI IMAGE STUDIO — Safe GitHub Sync and Release Trigger
+echo   P.AI AI IMAGE STUDIO — Safe Release Tag Publisher
 echo   Repository: https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO
 echo ============================================================================
-
 echo.
+
 where git >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Git is not installed or not in PATH.
-    echo Install Git from https://git-scm.com/ and try again.
     pause
     exit /b 1
 )
 
 if not exist ".git" (
-    echo [ERROR] This directory is not a Git clone.
-    echo Do not initialize an empty repository from the release ZIP.
-    echo First clone https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO.git,
-    echo copy your intended changes into that clone, then run this script there.
+    echo [ERROR] This folder is not a Git clone.
+    echo Clone the repository first; do not publish from a downloaded ZIP.
     pause
     exit /b 2
 )
@@ -28,87 +25,87 @@ if not exist ".git" (
 for /f "delims=" %%B in ('git branch --show-current') do set "BRANCH=%%B"
 if /I not "%BRANCH%"=="main" (
     echo [ERROR] Current branch is "%BRANCH%", not main.
-    echo Switch to main and review or commit your changes before syncing.
+    echo Switch to main after the release fix has been reviewed and merged.
     pause
     exit /b 3
 )
 
-git remote get-url origin >nul 2>nul
+echo [1/4] Fetching current main branch from GitHub...
+git fetch origin main
 if errorlevel 1 (
-    echo [ERROR] Remote origin is missing. Add the expected GitHub repository first.
+    echo [ERROR] Could not fetch origin/main.
     pause
     exit /b 4
 )
+
 for /f "delims=" %%V in (VERSION) do set "VERSION=%%V"
+for /f "delims=" %%V in ('git show origin/main:VERSION') do set "REMOTE_VERSION=%%V"
 if not defined VERSION (
     echo [ERROR] VERSION file is empty or missing.
     pause
     exit /b 5
 )
-set "TAG=v%VERSION%"
-
-echo [1/5] Staging current changes...
-git add -A
-git diff --cached --quiet
-if errorlevel 1 (
-    git commit -m "Release P.AI AI IMAGE STUDIO %VERSION%"
-    if errorlevel 1 (
-        echo [ERROR] Commit failed. Review Git output and try again.
-        pause
-        exit /b 6
-    )
-) else (
-    echo No new tracked changes to commit.
+if not "%VERSION%"=="%REMOTE_VERSION%" (
+    echo [ERROR] Local VERSION does not match origin/main.
+    echo Only tag a version that is already committed on the remote main branch.
+    pause
+    exit /b 6
 )
 
-echo [2/5] Fetching origin and replaying local commits safely...
-git fetch origin
-if errorlevel 1 (
-    echo [ERROR] Could not fetch origin. No force push was attempted.
+for /f "delims=" %%H in ('git rev-parse HEAD') do set "LOCAL_HEAD=%%H"
+for /f "delims=" %%H in ('git rev-parse origin/main') do set "REMOTE_HEAD=%%H"
+if not "%LOCAL_HEAD%"=="%REMOTE_HEAD%" (
+    echo [ERROR] Local main is not exactly equal to origin/main.
+    echo Pull the reviewed, merged main branch and run again.
     pause
     exit /b 7
 )
-git pull --rebase origin main
-if errorlevel 1 (
-    echo [ERROR] Rebase could not finish. Resolve conflicts manually, then rerun this script.
+
+for /f "delims=" %%S in ('git status --porcelain') do set "DIRTY=1"
+if defined DIRTY (
+    echo [ERROR] Working tree has uncommitted or untracked files.
+    echo Commit changes through a reviewed pull request before publishing a tag.
     pause
     exit /b 8
 )
 
-echo [3/5] Pushing main without force...
-git push -u origin main
-if errorlevel 1 (
-    echo [ERROR] Push was rejected. Review branch divergence and permissions; history was not overwritten.
+set "TAG=v%VERSION%"
+echo [2/4] Checking whether tag %TAG% already exists remotely...
+for /f "delims=" %%T in ('git ls-remote --tags origin "refs/tags/%TAG%"') do set "REMOTE_TAG=%%T"
+if defined REMOTE_TAG (
+    echo [ERROR] Remote tag %TAG% already exists. Published tags are never overwritten.
     pause
     exit /b 9
 )
 
-echo [4/5] Checking release tag %TAG%...
-git ls-remote --exit-code --tags origin "refs/tags/%TAG%" >nul 2>nul
-if not errorlevel 1 (
-    echo [ERROR] Tag %TAG% already exists on GitHub and will not be overwritten.
-    echo To publish a new build, update VERSION to a new beta version and commit that change.
-    echo The Windows release workflow publishes the installer when a new version tag is pushed.
-    pause
-    exit /b 10
-)
-git tag -a "%TAG%" -m "P.AI AI IMAGE STUDIO %VERSION%"
+echo [3/4] Creating or verifying a local annotated tag at reviewed main...
+git rev-parse --verify "refs/tags/%TAG%" >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] Could not create tag %TAG%. The existing tags were not changed.
-    pause
-    exit /b 11
+    git tag -a "%TAG%" -m "P.AI AI IMAGE STUDIO %VERSION%"
+    if errorlevel 1 (
+        echo [ERROR] Could not create local tag %TAG%.
+        pause
+        exit /b 10
+    )
+) else (
+    for /f "delims=" %%H in ('git rev-parse "%TAG%^{commit}"') do set "TAG_TARGET=%%H"
+    if not "%TAG_TARGET%"=="%REMOTE_HEAD%" (
+        echo [ERROR] Local tag %TAG% points to a different commit. It was not changed.
+        pause
+        exit /b 11
+    )
 )
 
-echo [5/5] Pushing new tag %TAG% to start the Windows installer workflow...
+echo [4/4] Pushing new tag %TAG% without force...
 git push origin "%TAG%"
 if errorlevel 1 (
-    echo [ERROR] Tag push failed. The tag was not force-pushed.
+    echo [ERROR] Tag push failed. No force push or tag rewrite was attempted.
     pause
     exit /b 12
 )
 
 echo.
-echo Sync completed. GitHub Actions will build and attach the Windows installer if the workflow succeeds:
+echo Tag pushed. GitHub Actions will build and attach the Windows installer if the build succeeds:
 echo https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO/actions
 start "" "https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO/actions"
 pause
