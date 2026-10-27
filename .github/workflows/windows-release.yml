@@ -2,6 +2,9 @@ name: Build Windows installer
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     tags:
       - "v*"
@@ -35,13 +38,22 @@ jobs:
         run: choco install innosetup --yes --no-progress
       - name: Build app and installer
         shell: pwsh
-        run: .\Build_Windows_Installer.bat
+        run: .\build_release.ps1
       - name: Verify installer output
         shell: pwsh
         run: |
           $setup = Get-ChildItem -Path "dist-installer" -Filter "PAI-AI-Image-Studio-Setup-*.exe" -File | Select-Object -First 1
           if (-not $setup) { throw "No installer EXE was produced." }
-          Get-FileHash -Algorithm SHA256 $setup.FullName | Format-List
+          $sha = [System.Security.Cryptography.SHA256]::Create()
+          $stream = [System.IO.File]::OpenRead($setup.FullName)
+          try {
+            $digest = [System.BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+          } finally {
+            $stream.Dispose()
+            $sha.Dispose()
+          }
+          Write-Host "Installer: $($setup.Name)"
+          Write-Host "SHA-256: $digest"
       - name: Upload setup artifact
         uses: actions/upload-artifact@v7
         with:
