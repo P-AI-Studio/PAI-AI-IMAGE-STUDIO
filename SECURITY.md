@@ -2,7 +2,7 @@
 
 ## Supported version
 
-The current beta line is `1.0.0-beta.1`. Beta releases may contain defects and are not validated against every Windows, driver, and model combination.
+The current beta line is `1.0.0-beta.2`. The previous `1.0.0-beta.1` release remains unchanged; release tags are not force-updated. Beta releases may contain defects and are not validated against every Windows, driver, and model combination.
 
 ## Report a vulnerability
 
