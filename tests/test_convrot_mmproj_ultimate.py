@@ -273,6 +273,10 @@ def test_two_stage_1024_then_ultimate_2048_across_closeup_enhance_generate_edit_
             return Image.new("RGB", size, (130, 145, 160))
 
         engine._infer_with_auto_offload_retry = fake_infer
+        # Avoid invoking the Windows-only external upscaler binary in this unit test.
+        engine._upscale_image_with_selected_model = (
+            lambda image, options, target_size: image.resize(target_size, Image.Resampling.BICUBIC)
+        )
         job = Job(
             workflow=wf,
             input_path=str(src_path) if wf != "image_generate" else None,
@@ -416,12 +420,6 @@ def test_ultimate_half_res_lanczos_pipeline_when_on_and_disabled_when_off(tmp_pa
 
     convrot_te = tmp_path / "qwen3vl_8b_int8_convrot.safetensors"
     convrot_te.write_bytes(b"stub")
-
-    # Keep this unit test independent of the Windows-only native upscaler binaries.
-    monkeypatch.setattr(
-        LocalEngine, "_upscale_image_with_selected_model",
-        lambda self, image, options, target_size: image.resize(target_size, Image.Resampling.BICUBIC),
-    )
 
     # 1. Ultimate ON: 1024 -> 512, 2048 -> 1024, 4096 -> 2048
     for target_res, expected_pass1 in ((1024, 512), (2048, 1024), (4096, 2048)):
