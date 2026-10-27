@@ -51,7 +51,7 @@ jobs:
           retention-days: 30
       - name: Publish GitHub release asset for version tags
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: P.AI AI Image Studio ${{ github.ref_name }}
           generate_release_notes: true
