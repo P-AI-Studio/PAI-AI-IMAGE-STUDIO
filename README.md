@@ -79,18 +79,21 @@ The full unit, validation, regression, and release-smoke test suite must pass pr
 
 ## Repository Structure
 
+Only source, required branding assets, licensing/documentation, build configuration, and automated tests are tracked. Compiled installers, model weights, native runtimes, generated images, and local caches are excluded.
+
 ```text
-pai_ai_image_studio.py           Application entry point
-pai_studio/                      Core studio package (engine, catalog, validation, UI)
-assets/                          Application icons and branding assets
-licenses/                        Third-party notices and license documentation
-tests/                           Automated unit, regression, and release-smoke tests
-.github/workflows/               CI test runner and Windows installer release workflow
-Run_PAI_AI_IMAGE_STUDIO.bat      Windows source-mode launcher
-Install_Update_Requirements.bat  Dependency installer script
-Build_Windows_Installer.bat      One-click Windows installer build script
-build_release.ps1                PowerShell packaging & verification pipeline
-installer.iss                    Inno Setup 6 configuration
+README.md / README_FA.md          Project and build instructions
+LICENSE / SECURITY.md             Repository terms and security reporting
+CHANGELOG.md / VERSION            Release notes and version source of truth
+licenses/                         Third-party notices
+pai_ai_image_studio.py            Application entry point
+pai_studio/                       Application engine, catalog, validation and UI
+assets/                           Icons and branding used by the app/installer
+requirements*.txt                 Runtime, build and test dependencies
+Build_Windows_Installer.bat       One-click local installer build
+build_release.ps1 / installer.iss PyInstaller build and Inno Setup configuration
+tests/                            Regression and release validation suite
+.github/workflows/                Source tests and Windows installer CI/release
 ```
 
 ## Privacy & Security Architecture
