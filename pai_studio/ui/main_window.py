@@ -2000,6 +2000,34 @@ class App(QMainWindow):
             return
         if self.model_worker and self.model_worker.isRunning():
             return
+
+        # Keep first-run setup staged: model weights are user-selected (and license-gated)
+        # in Model Catalog, while the much larger native engine is downloaded only after
+        # the required model components are present and verified.
+        catalog = getattr(self, "model_catalog_dialog", None)
+        if catalog is not None:
+            target = Path(self.model_path_edit.text().strip() or str(MODEL_DIR)).expanduser()
+            if not target.is_absolute():
+                target = (APP_DIR / target).resolve()
+            catalog.target_dir = target
+            if hasattr(catalog, "destination_label"):
+                catalog.destination_label.setText(f"Model folder: {target}")
+            assets_ready, reason = catalog._profile_has_verified_catalog_assets()
+            if not assets_ready:
+                answer = QMessageBox.question(
+                    self,
+                    "Complete model setup first",
+                    f"{reason}\n\nOpen Model Catalog to download or verify the selected components? "
+                    "The native engine download will start only after the required model files are ready.",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if answer == QMessageBox.StandardButton.Yes:
+                    self.download_model_bundle()
+                else:
+                    self.statusBar().showMessage("Model setup incomplete · open Model Catalog to download/verify components.")
+                return
+
         self._configure_engine_from_ui()
         # A previous Stop now must not poison the next model load attempt.
         self.engine.force_stop.clear()
