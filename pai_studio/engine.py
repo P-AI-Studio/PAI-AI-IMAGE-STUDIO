@@ -42,6 +42,11 @@ from .constants import (
     REALESRGAN_HF_NCNN_BASE,
     REALESRGAN_MODEL_NAMES,
     REALESRGAN_MODEL_NATIVE_SCALES,
+    REALESRGAN_CATALOG_BY_ID,
+    UPSCAYL_NCNN_URL,
+    UPSCAYL_NCNN_SHA256,
+    UPSCAYL_NCNN_ARCHIVE_SIZE,
+    UPSCAYL_NCNN_MODEL_BASE_URL,
     realesrgan_native_scale,
     REALESRGAN_NCNN_URLS,
     _download_ssl_context,
@@ -1641,6 +1646,177 @@ class LocalEngine:
             raise RuntimeError("The Real-ESRGAN runtime has an executable but no complete NCNN model pair after repair.")
         self.log(f"Real-ESRGAN portable runtime ready · SHA-256={hashlib.sha256(archive.read_bytes()).hexdigest()}")
         return exe
+
+    def _ensure_upscayl_runtime(self) -> Path:
+        """Install a pinned Upscayl-NCNN Windows runner for curated custom NCNN models."""
+        if os.name != "nt":
+            raise RuntimeError("The bundled Upscayl-NCNN runner currently supports Windows x64 only.")
+        runtime_root = DATA_ROOT / "runtime" / "upscayl-ncnn"
+        exe = next((p for p in runtime_root.rglob("upscayl-bin.exe") if p.is_file()), None) if runtime_root.exists() else None
+        if exe is not None:
+            return exe
+
+        cache_dir = CACHE_DIR / "runtime-downloads"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        archive = cache_dir / "upscayl-bin-20251207-174704-windows.zip"
+        part = archive.with_suffix(archive.suffix + ".part")
+
+        def valid_archive(path: Path) -> bool:
+            try:
+                if not path.is_file() or path.stat().st_size != UPSCAYL_NCNN_ARCHIVE_SIZE:
+                    return False
+                digest = _sha256_file(path, self.force_stop)
+                if digest.lower() != UPSCAYL_NCNN_SHA256.lower():
+                    return False
+                with zipfile.ZipFile(path, "r") as zf:
+                    if zf.testzip() is not None:
+                        return False
+                    return any(Path(n.replace("\\", "/")).name.lower() == "upscayl-bin.exe" for n in zf.namelist())
+            except (OSError, zipfile.BadZipFile, RuntimeError, Aborted):
+                return False
+
+        if not valid_archive(archive):
+            archive.unlink(missing_ok=True)
+            part.unlink(missing_ok=True)
+            self.status_callback("Downloading the pinned Upscayl-NCNN runtime…")
+            request = urllib.request.Request(
+                UPSCAYL_NCNN_URL,
+                headers={"User-Agent": f"P.AI-Image-Studio/{APP_VERSION}", "Accept-Encoding": "identity"},
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=180, context=_download_ssl_context()) as response, part.open("wb") as out:
+                    expected_header = response.headers.get("Content-Length")
+                    received = 0
+                    while True:
+                        if self.force_stop.is_set():
+                            raise Aborted()
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        received += len(chunk)
+                        self.status_callback(f"Downloading Upscayl-NCNN runtime · {received / 1e6:.1f} / {UPSCAYL_NCNN_ARCHIVE_SIZE / 1e6:.1f} MB")
+                    out.flush()
+                    os.fsync(out.fileno())
+                if expected_header and expected_header.isdigit() and received != int(expected_header):
+                    raise RuntimeError(f"Incomplete Upscayl-NCNN response: received {received} bytes, expected {expected_header}.")
+                if not valid_archive(part):
+                    raise RuntimeError("The Upscayl-NCNN archive failed its pinned SHA-256, size, executable, or ZIP CRC check.")
+                part.replace(archive)
+            except Exception:
+                part.unlink(missing_ok=True)
+                raise
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archive, "r") as zf:
+            if zf.testzip() is not None:
+                raise RuntimeError("The Upscayl-NCNN runtime ZIP has invalid CRC data.")
+            for info in zf.infolist():
+                target = validate_archive_member_path(runtime_root, info.filename)
+                if info.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info, "r") as src, target.open("wb") as dst:
+                    shutil.copyfileobj(src, dst, length=1024 * 1024)
+        exe = next((p for p in runtime_root.rglob("upscayl-bin.exe") if p.is_file()), None)
+        if exe is None:
+            raise RuntimeError("The verified Upscayl-NCNN archive did not contain upscayl-bin.exe.")
+        self.log(f"Upscayl-NCNN runtime installed and verified · SHA-256={UPSCAYL_NCNN_SHA256}.")
+        return exe
+
+    @staticmethod
+    def _git_blob_sha1(path: Path) -> str:
+        """Calculate the Git object SHA-1 (blob header + bytes) used by the pinned model manifest."""
+        size = path.stat().st_size
+        digest = hashlib.sha1()
+        digest.update(f"blob {size}\\0".encode("ascii"))
+        with path.open("rb") as stream:
+            while True:
+                chunk = stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _ensure_upscayl_model_pair(self, exe: Path, model_name: str) -> Path:
+        """Download a pinned custom NCNN model pair and verify exact sizes and Git blob hashes."""
+        meta = REALESRGAN_CATALOG_BY_ID.get(model_name)
+        if not meta or meta.get("backend") != "upscayl":
+            raise RuntimeError(f"No pinned Upscayl-NCNN model manifest exists for '{model_name}'.")
+        model_dir = exe.parent / "models"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        stem = str(meta["model_file"])
+        for suffix in ("param", "bin"):
+            filename = f"{stem}.{suffix}"
+            target = model_dir / filename
+            expected_size = int(meta[f"{suffix}_size"])
+            expected_blob = str(meta[f"{suffix}_blob_sha1"]).lower()
+
+            def is_valid(path: Path) -> bool:
+                try:
+                    return path.is_file() and path.stat().st_size == expected_size and self._git_blob_sha1(path).lower() == expected_blob
+                except OSError:
+                    return False
+
+            if is_valid(target):
+                continue
+            part = target.with_suffix(target.suffix + ".part")
+            part.unlink(missing_ok=True)
+            url = UPSCAYL_NCNN_MODEL_BASE_URL + urllib.parse.quote(filename)
+            self.status_callback(f"Downloading Ultimate model asset · {filename}…")
+            self.log(f"Fetching pinned community NCNN model asset: {url}")
+            request = urllib.request.Request(
+                url,
+                headers={"User-Agent": f"P.AI-Image-Studio/{APP_VERSION}", "Accept-Encoding": "identity"},
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=180, context=_download_ssl_context()) as response, part.open("wb") as out:
+                    expected_header = response.headers.get("Content-Length")
+                    received = 0
+                    while True:
+                        if self.force_stop.is_set():
+                            raise Aborted()
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        received += len(chunk)
+                        self.status_callback(f"Downloading {filename} · {received / 1e6:.1f} / {expected_size / 1e6:.1f} MB")
+                    out.flush()
+                    os.fsync(out.fileno())
+                if expected_header and expected_header.isdigit() and received != int(expected_header):
+                    raise RuntimeError(f"Incomplete {filename} response: received {received} bytes, expected {expected_header}.")
+                if received != expected_size or self._git_blob_sha1(part).lower() != expected_blob:
+                    raise RuntimeError(f"Downloaded NCNN model asset '{filename}' failed its pinned size or Git blob SHA-1 validation.")
+                os.replace(part, target)
+            except Exception:
+                part.unlink(missing_ok=True)
+                raise
+        self.log(f"Verified custom NCNN model '{model_name}' installed in {model_dir}.")
+        return model_dir
+
+    def _upscale_image_with_selected_model(
+        self, image: Image.Image, options: dict[str, Any], target_size: tuple[int, int]
+    ) -> Image.Image:
+        """Run the selected learned NCNN upscaler on an in-memory Ultimate stage, then fit exact canvas."""
+        temp_root = CACHE_DIR / "ultimate-upscale-temp" / uuid.uuid4().hex
+        temp_root.mkdir(parents=True, exist_ok=False)
+        source_path = temp_root / "ultimate-stage.png"
+        try:
+            image.convert("RGB").save(source_path, format="PNG")
+            result_path = self._run_upscale_file(source_path, options, temp_root)
+            with Image.open(result_path) as opened:
+                result = ImageOps.exif_transpose(opened).convert("RGB")
+            wanted = (max(1, int(target_size[0])), max(1, int(target_size[1])))
+            if result.size != wanted:
+                self.log(
+                    f"Selected AI upscaler produced {result.width}×{result.height}; "
+                    f"fitting its learned result to the exact Ultimate canvas {wanted[0]}×{wanted[1]}."
+                )
+                result = result.resize(wanted, Image.Resampling.LANCZOS)
+            return result
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
 
     def _run_upscale_file(self, input_path: Path, options: dict[str, Any], output_dir: Optional[Path] = None) -> Path:
         """Run Real-ESRGAN/Real-ESRNet locally through Vulkan at the selected model's native scale."""
