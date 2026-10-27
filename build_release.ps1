@@ -14,7 +14,6 @@ $LogoPng = Join-Path $ProjectRoot 'assets\pai_logo.png'
 $LogoData = "$LogoPng;assets"
 $RuntimeDir = Join-Path $DistDir 'runtime'
 
-$CudaRuntimeMirrorUrl = 'https://sourceforge.net/projects/stable-diffusion-cpp.mirror/files/master-964-1d0a58a/cudart-sd-bin-win-cu12-x64.zip/download'
 
 Write-Host '== P.AI AI IMAGE STUDIO · Version 1 Beta release build =='
 # Use the installed system CPython selected by the setup helper; no project-local Python/venv.
