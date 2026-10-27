@@ -2422,7 +2422,7 @@ class LocalEngine:
             raise RuntimeError("No enhancement attempt produced an image.")
         if best_diff > warn_diff:
             self.log(f"Warning: best structural difference is {best_diff:.2f}, above warning threshold {warn_diff:.2f}.")
-        self.log("Qwen-Image 2.1 full-frame enhancement pass complete; external Real-ESRGAN/Real-ESRNet is not chained into this workflow.")
+        self.log("Qwen-Image 2.1 full-frame enhancement pass complete; Ultimate applies the selected learned upscaler only when enabled.")
         return best
 
     @staticmethod
@@ -2473,10 +2473,10 @@ class LocalEngine:
                                          quality: str, steps: int, detail_mode: str = "max_detail",
                                          use_img2img: bool = True, tile_strength: Optional[float] = None,
                                          detail_profile: str = "balanced", force: bool = False) -> Image.Image:
-        """Use Qwen itself for local detail refinement after its full-frame pass exceeds 2048 px.
+        """Use Qwen itself for local detail refinement after the selected AI upscaler.
 
-        This avoids using Real-ESRGAN in the Enhance workflow. A global Qwen pass sets the
-        composition; overlapping local passes then restore texture at the requested output size.
+        Ultimate establishes composition with Qwen, runs the selected learned NCNN upscaler,
+        then uses overlapping Qwen crops to restore local texture at output size.
         """
         image = image.convert("RGB")
         width, height = image.size
@@ -2783,7 +2783,7 @@ class LocalEngine:
                 return int(base_seed) + index
             return int(base_seed)
 
-        # Ultimate and its Lanczos scaling run strictly when Ultimate is enabled by the user.
+        # Ultimate and its selected learned AI upscaler run only when the single Ultimate toggle is enabled.
         if job.workflow in {"enhance", "lora_closeup_1024", "square_1_1"}:
             if job.prompt and self._needs_english_translation(job.prompt):
                 job.prompt = self._translate_image_prompt_to_english(job.prompt, job.workflow)
@@ -2914,7 +2914,7 @@ class LocalEngine:
                     s1_w, s1_h = self._ultimate_stage1_size((job.width, job.height), True, ult_scale)
                     self.log(
                         f"Qwen Enhance reconstruction · profile={profile_key} · Ultimate=ON · Pass 1={s1_w}×{s1_h} → "
-                        f"Lanczos Ultimate scale={ult_scale}× → final={job.width}×{job.height} · "
+                        f"selected AI model {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → final={job.width}×{job.height} · "
                         f"denoise={effective_tile_strength:.2f} · coverage={self._active_ultimate_tile_coverage:.0%} · "
                         f"tile steps={int(job.custom.get('ultimate_qwen_steps', 8))} · overlapping tiles."
                     )
