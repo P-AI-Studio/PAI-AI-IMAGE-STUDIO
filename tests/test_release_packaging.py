@@ -25,8 +25,10 @@ def test_publish_script_never_force_pushes_or_rewrites_existing_release_tags():
     assert "git tag -f" not in script.lower()
     assert "RELEASE_NOTES.md" not in script
     assert 'if not exist ".git"' in script
-    assert "git pull --rebase origin main" in script
-    assert "already exists on GitHub and will not be overwritten" in script
+    assert "git push -u origin main" not in script
+    assert "Remote tag %TAG% already exists" in script
+    assert "git status --porcelain" in script
+    assert "git rev-parse origin/main" in script
 
 
 def test_installer_filename_uses_the_version_file():
