@@ -438,28 +438,31 @@ def test_progress_is_determinate_and_has_stage_fill_instead_of_marquee():
     assert 'Model components initialized. Progress appears here when a job starts.' in source
 
 
-def test_real_esrgan_is_scale_only_and_separate_from_qwen_output_size():
+def test_selected_ai_upscaler_is_part_of_ultimate_and_keeps_output_size_controls_separate():
     source = read_source()
     assert 'self.upscale_scale_combo' not in source
     assert 'self.upscale_mode_combo' not in source
     assert 'self.upscale_custom_w' not in source
     assert 'self.upscale_custom_h' not in source
     assert 'scale = realesrgan_native_scale(model_name)' in source
-    # Lanczos is allowed only for the Qwen Ultimate source canvas, not as a hidden replacement for Real-ESRGAN.
     upscale_start = source.index('    def _run_upscale_file')
-    upscale_end = source.index('    def _translate_image_prompt_to_english', upscale_start)
+    upscale_end = source.index('    def _needs_english_translation', upscale_start)
     upscale_impl = source[upscale_start:upscale_end]
     assert 'Image.Resampling.LANCZOS' not in upscale_impl
-    assert 'Image.Resampling.LANCZOS' in source[source.index('    def _enhance_qwen_output'):source.index('    def process(self, job: Job)')]
-    assert 'QGroupBox("Output Size · Qwen Image 2.1")' in source
-    assert 'self.realesrgan_box = QGroupBox("AI Upscaler · Real-ESRGAN / Real-ESRNet")' in source
-    assert 'upscale_page.addWidget(esrgan_card)' in source
-    assert 'def _upscale_custom_from_ui(self)' in source
+    enhance_start = source.index('    def _enhance_qwen_output')
+    enhance_end = source.index('    def process(self, job: Job)', enhance_start)
+    enhance = source[enhance_start:enhance_end]
+    assert 'self._upscale_image_with_selected_model' in enhance
+    assert 'upscale_options: Optional[dict[str, Any]] = None' in enhance
+    assert 'self._run_upscale_file(source_path, options, temp_root)' in source
+    assert 'self.realesrgan_box = QGroupBox("Ultimate · Selected AI Upscaler Model")' in source
+    assert 'ultimate_page.addWidget(esrgan_card)' in source
+    assert 'self.upscale_tile_combo.addItem(label, value)' in source
+    assert 'Tile 200' in source and 'Tile 600' in source
     assert '"upscale_enabled": False' in source
     assert 'self.std_output_size_widget.setVisible(workflow == "enhance")' in source
     assert 'self._upscale_size_in_basic' not in source
     assert 'self.upscale_enabled_check' not in source
-
 
 def test_closeup_prompt_enforces_a_tight_target_frame_and_uses_lora_trigger_word():
     source = read_source()
@@ -614,20 +617,28 @@ def test_basic_pane_is_wider_and_has_no_horizontal_scrollbar():
     assert 'basic_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)' in source
 
 
-def test_model_catalog_offers_real_esrgan_models_and_download_links():
+def test_model_catalog_offers_official_and_curated_community_upscalers_inside_ultimate():
     source = read_source()
-    assert 'REALESRGAN_CATALOG: list[dict[str, str]]' in source
+    dialog = (ROOT / "pai_studio" / "ui" / "dialogs.py").read_text(encoding="utf-8")
+    assert 'REALESRGAN_CATALOG: list[dict[str, Any]]' in source
     assert 'Real-ESRGAN x4plus · Photo / general images' in source
     assert 'Real-ESRNet x4plus · Conservative photo restoration' in source
     assert 'Real-ESRGAN x4plus anime · Anime / illustration' in source
     assert 'AnimeVideo-v3 · Lightweight animation upscaler' in source
-    assert 'Official Windows runtime' in source
-    assert 'Model references' in source
-    assert 'btn_download_upscaler.clicked.connect(self.start_upscaler_download)' in source
-    assert 'btn_use_upscaler.clicked.connect(self.apply_upscaler_choice)' in source
-    assert 'Model references' in source
-    assert 'NCNN model' in source
-
+    assert 'NMKD Siax 200k' in source
+    assert 'LSDIR+ C' in source
+    assert 'Nomos8k SC' in source
+    assert 'HFA2k' in source
+    assert 'RealESRGAN_General_WDN_x4_v3' in source
+    assert 'UPSCAYL_NCNN_SHA256' in source
+    assert 'param_blob_sha1' in source and 'bin_blob_sha1' in source
+    assert 'Real-ESRGAN Windows runtime' in dialog
+    assert 'Community NCNN model catalogue' in dialog
+    assert 'btn_download_upscaler.clicked.connect(self.start_upscaler_download)' in dialog
+    assert 'btn_use_upscaler.clicked.connect(self.apply_upscaler_choice)' in dialog
+    assert 'ultimate_page.addWidget(esrgan_card)' in dialog
+    assert 'add_settings_tab("AI Upscaler")' not in dialog
+    assert 'NCNN model' in dialog
 
 def test_prompt_presets_are_connected_to_all_qwen_workflows():
     source = read_source()
@@ -723,30 +734,30 @@ def test_settings_accept_previous_versions_and_migrate_to_eight_step_defaults():
     assert 'self.gen_seed_mode.currentTextChanged.connect(self.schedule_save)' in source
     assert 'self.edit_seed_mode.currentTextChanged.connect(self.schedule_save)' in source
 
-def test_real_esrgan_upscale_is_standalone_and_local_with_scale_tile_and_tta():
+def test_selected_upscaler_is_local_and_supports_official_and_pinned_community_models():
     source = read_source()
+    worker = (ROOT / "pai_studio" / "workers.py").read_text(encoding="utf-8")
     assert 'REALESRGAN_NCNN_URL' in source
     assert 'realesrgan-x4plus' in source
     assert 'realesrnet-x4plus' in source
     assert 'realesrgan-x4plus-anime' in source
     assert 'realesr-animevideov3' in source
-    assert "realesrgan_native_scale" in source
-    assert "self.upscale_scale_combo" not in source
+    assert 'RealESRGAN_General_x4_v3' in source
+    assert '4x_NMKD-Siax_200k' in source
+    assert 'realesrgan_native_scale' in source
+    assert 'self.upscale_scale_combo' not in source
     assert '"upscale_tile": 0' in source
+    assert 'Tile 200' in source and 'Tile 600' in source
     assert 'if bool(job.custom.get("upscale_enabled", False))' not in source[source.index('    def process(self, job: Job)'):source.index('class Worker')]
     assert 'if job.workflow == "upscale_only"' in source
-    assert '"-s", str(scale), "-t", str(tile)' in source
-    assert "def _realesrgan_model_assets_present" in source
-    assert 'self.realesrgan_box = QGroupBox("AI Upscaler · Real-ESRGAN / Real-ESRNet")' in source
-    assert 'self.realesrgan_box = QGroupBox("AI Upscaler · Real-ESRGAN / Real-ESRNet")' in source
-    assert 'upscale_page.addWidget(esrgan_card)' in source
-    assert 'Use manually or switch ESRGAN ON in the workflow to run after generation.' in source
-    assert 'The shared controls in the top bar' not in source
-    assert 'AI Upscale · shared by all workflows' not in source
-    assert 'right_layout.addWidget(upscale_box, 0)' not in source
-    assert 'tabs.addTab(size_tab, "Inference Size")' not in source
-    assert 'tabs.addTab(upscale_tab, "AI Upscale")' not in source
-
+    assert '"-z", str(scale), "-s", str(scale), "-t", str(tile)' in source
+    assert 'def _ensure_upscayl_runtime(self)' in source
+    assert 'def _ensure_upscayl_model_pair(self, exe: Path, model_name: str)' in source
+    assert 'def _git_blob_sha1(path: Path)' in source
+    assert 'self._ensure_upscayl_model_pair(executable, self.model_name)' in worker
+    assert 'self.realesrgan_box = QGroupBox("Ultimate · Selected AI Upscaler Model")' in source
+    assert 'Run Selected Upscaler' in source
+    assert 'upscale_page.addWidget(esrgan_card)' not in (ROOT / "pai_studio" / "ui" / "dialogs.py").read_text(encoding="utf-8")
 
 def test_requirements_bat_uses_system_python_and_nvidia_driver():
     bat = (ROOT / "Install_Update_Requirements.bat").read_text(encoding="utf-8")
@@ -1461,7 +1472,7 @@ def test_square_composite_preserves_source_core_until_output_enhance_and_enhance
     assert 'source_core, core_prompt, source_core.width, source_core.height' not in square
     assert 'version < 28' in source and 'decoded["gpu_memory_mode"] = "auto"' in source
 
-def test_ultimate_style_qwen_four_tile_refinement_is_toggleable_and_persisted():
+def test_ultimate_uses_full_coverage_qwen_grid_and_is_toggleable():
     source = read_source()
     assert '"enhance_detail_mode": "fast"' in source
     assert '"ultimate_qwen_upscale_enabled": False' in source
@@ -1472,8 +1483,8 @@ def test_ultimate_style_qwen_four_tile_refinement_is_toggleable_and_persisted():
     detail = source[source.index('    def _qwen_detail_refine_large_output'):source.index('    def _enhance_qwen_output')]
     assert 'detail_mode == "ultimate"' in detail
     assert 'getattr(self, "_active_ultimate_denoise_strength", 0.20)' in detail
-    assert 'x_starts = [0, max(0, width - tile_w)] if width > 1 else [0]' in detail
-    assert 'y_starts = [0, max(0, height - tile_h)] if height > 1 else [0]' in detail
+    assert 'x_starts = self._tile_starts(width, tile_w)' in detail
+    assert 'y_starts = self._tile_starts(height, tile_h)' in detail
     assert 'getattr(self, "_active_ultimate_tile_coverage", 0.50)' in detail
     assert 'getattr(self, "_active_ultimate_refinement_passes", 1)' in detail
     assert '"ultimate_qwen_passes": self.ultimate_qwen_passes_spin.value()' in source
@@ -1484,10 +1495,9 @@ def test_ultimate_style_qwen_four_tile_refinement_is_toggleable_and_persisted():
     assert 'self.settings["enhance_detail_mode"] = "ultimate" if enabled else "fast"' in source
     assert 'if version < 38:' in source and 'decoded["ultimate_qwen_upscale_enabled"] = False' in source
     assert 'detail_mode == "fast"' in detail
-    assert ('Qwen overlapping tiles' in detail or 'Qwen 4-tile' in detail)
+    assert 'full-coverage {len(x_starts)}×{len(y_starts)} Qwen grid' in detail
     assert 'Real-ESRGAN' in source and 'Real-ESRNet' in source
-
-
+    assert 'selected AI upscaler' in source
 
 def test_image_prompts_are_translated_by_the_selected_local_encoder_without_remote_service():
     source = read_source()
@@ -1993,14 +2003,16 @@ def test_setup_scripts_verify_required_imports_without_blocking_on_unrelated_pip
 
 
 
-def test_enhance_scale_is_stage_one_and_ultimate_scale_is_independent_stage_two():
+def test_enhance_scale_is_stage_one_and_ultimate_uses_selected_learned_model_for_stage_two():
     source = read_source()
     job_builder = source[source.index('    def _job_from_ui('):source.index('    def generate_images(')]
     assert 'qwen_scale = int(getattr(self, "std_output_scale", 2))' in job_builder
     assert 'ultimate_qwen_scale_combo.currentData()' not in job_builder
     enhance = source[source.index('elif job.workflow == "enhance":'):source.index('elif job.workflow == "lora_closeup_1024":')]
     assert 'ultimate_scale=int(job.custom.get("ultimate_qwen_scale", 2) or 2) if ultimate_enabled else 1' in enhance
-    assert 'stage_result.resize((requested_width, requested_height), Image.Resampling.LANCZOS)' in source
+    assert 'upscale_options=job.custom' in enhance
+    assert 'self._upscale_image_with_selected_model(' in enhance
+    assert 'stage_result.resize((requested_width, requested_height), Image.Resampling.LANCZOS)' not in source
 
 def test_qwen_detail_profiles_keep_current_default_and_offer_stronger_modes():
     source = read_source()
@@ -2042,21 +2054,23 @@ def test_enhance_uses_stronger_reconstruction_strengths_without_enabling_ultimat
     assert "Ultimate=ON" in process and "Ultimate tiles" in process
 
 
-def test_qwen_enhancement_uses_lanczos_only_for_ultimate_source_canvas_and_keeps_standalone_realesrgan_visible():
+def test_ultimate_uses_selected_learned_upscaler_and_catalog_unifies_the_controls():
     source = read_source()
+    dialog = (ROOT / "pai_studio" / "ui" / "dialogs.py").read_text(encoding="utf-8")
     upscale_start = source.index('    def _run_upscale_file')
-    upscale_end = source.index('    def _translate_image_prompt_to_english', upscale_start)
+    upscale_end = source.index('    def _needs_english_translation', upscale_start)
     assert "Image.Resampling.LANCZOS" not in source[upscale_start:upscale_end]
     enhance_start = source.index('    def _enhance_qwen_output')
     enhance_end = source.index('    def process(self, job: Job)', enhance_start)
-    assert "Image.Resampling.LANCZOS" in source[enhance_start:enhance_end]
-    assert 'self.realesrgan_box = QGroupBox("AI Upscaler · Real-ESRGAN / Real-ESRNet")' in source
-    assert 'upscale_page.addWidget(esrgan_card)' in source
-    assert 'upscale_page.addWidget(esrgan_card)' in source
-    assert 'catalog_tabs.addTab(page_scroll, title)' in source
-    assert 'AI Upscaler' in source and 'Real-ESRGAN remains a separate optional post-process' in source
+    enhance = source[enhance_start:enhance_end]
+    assert "self._upscale_image_with_selected_model" in enhance
+    assert "Image.Resampling.LANCZOS" not in enhance
+    assert 'self.realesrgan_box = QGroupBox("Ultimate · Selected AI Upscaler Model")' in source
+    assert 'ultimate_page.addWidget(esrgan_card)' in dialog
+    assert 'ultimate_page = add_settings_tab("Ultimate")' in dialog
+    assert 'add_settings_tab("AI Upscaler")' not in dialog
+    assert 'upscale_page.addWidget(esrgan_card)' not in dialog
     assert 'Qwen-Image 2.1 full-frame enhancement pass complete' in source
-
 
 def test_qwen_detail_profile_prompts_and_strengths_are_distinct_and_routed_across_workflows():
     source = read_source()
@@ -2217,21 +2231,20 @@ def test_queue_and_input_files_are_first_for_enhance_closeup_and_square():
     assert 'basic_layout.insertWidget(1, files_box)' in body
 
 
-def test_real_esrgan_is_independent_and_visible_in_basic_and_model_catalog():
+def test_real_esrgan_is_integrated_into_ultimate_and_available_as_standalone_action():
     source = read_source()
-    assert 'self.realesrgan_box = QGroupBox("AI Upscaler · Real-ESRGAN / Real-ESRNet")' in source
-    assert 'upscale_page.addWidget(esrgan_card)' in source
-    assert 'upscale_page.addWidget(esrgan_card)' in source
-    assert 'add_settings_tab("AI Upscaler")' in source
-    assert 'Run AI Upscale' in source
+    dialog = (ROOT / "pai_studio" / "ui" / "dialogs.py").read_text(encoding="utf-8")
+    assert 'self.realesrgan_box = QGroupBox("Ultimate · Selected AI Upscaler Model")' in source
+    assert 'ultimate_page.addWidget(esrgan_card)' in dialog
+    assert 'ultimate_page.addWidget(ultimate_card)' in dialog
+    assert 'add_settings_tab("AI Upscaler")' not in dialog
+    assert 'Run Selected Upscaler' in source
     assert 'btn_realesrgan_settings_shortcut' not in source
     assert 'show_realesrgan_settings' not in source
     process = source[source.index('    def process(self, job: Job)'):source.index('class Worker(QThread)')]
     enhance_segment = process[process.index('elif job.workflow == "enhance"'):process.index('elif job.workflow == "lora_closeup_1024"')]
-    assert '_run_upscale_file(' not in enhance_segment
+    assert 'self._upscale_image_with_selected_model(' in enhance_segment
     assert 'if job.workflow == "upscale_only"' in source
-
-
 
 def test_watermark_toggle_is_opt_in_and_wired_to_supported_ai_workflows():
     source = read_source()
@@ -2360,12 +2373,13 @@ def test_lora_uses_relative_api_path_and_explicit_lora_model_directory():
     assert 'lora_runtime_changed = new_lora_path != self.lora_path or bool(lora_enabled) != self.lora_enabled' in source
 
 
-def test_global_feature_toggles_and_optional_low_resolution_preview_are_wired():
+def test_ultimate_is_the_single_upscaler_toggle_and_low_resolution_preview_is_wired():
     source = read_source()
     assert 'self.btn_ultimate_toggle = self._make_feature_toggle_button("ultimate")' in source
-    assert 'self.btn_auto_realesrgan = self._make_feature_toggle_button("esrgan")' in source
+    assert 'self.btn_auto_realesrgan' not in source
     assert '"auto_realesrgan_enabled": False' in source
-    assert 'if bool(job.custom.get("auto_realesrgan_enabled", False)) and outputs' in source
+    assert 'not bool(job.custom.get("ultimate_qwen_upscale_enabled", False))' in source
+    assert 'self._upscale_image_with_selected_model(' in source
     assert '"preview": str(self.live_preview_method or "tae") if str(self.live_preview_method or "tae") in {"proj", "tae", "vae"} else "none"' in source
     assert '"preview_interval": max(1, min(20, int(self.live_preview_interval or 1)))' in source
     assert 'self._refresh_live_generation_preview' in source
@@ -2376,30 +2390,29 @@ def test_global_feature_toggles_and_optional_low_resolution_preview_are_wired():
     assert 'QUALITY_PRESETS = ["Turbo · 8 steps", "Fast · 12 steps", "Balanced · 20 steps", "Standard · 28 steps"]' in source
     assert 'Draft · 8 steps' not in source
 
-def test_workflow_feature_toggles_are_below_workflow_selector_and_settings_are_in_app():
+def test_workflow_feature_toggles_and_catalog_use_one_ultimate_upscaler_section():
     text = read_source()
+    dialog = (ROOT / "pai_studio" / "ui" / "dialogs.py").read_text(encoding="utf-8")
     assert 'self.btn_ultimate_toggle = self._make_feature_toggle_button("ultimate")' in text
-    assert 'self.btn_auto_realesrgan = self._make_feature_toggle_button("esrgan")' in text
+    assert 'self.btn_auto_realesrgan' not in text
     assert 'outer.addLayout(workflow_row)' in text
     assert 'bl.addLayout(self.workflow_feature_row)' in text
-    assert 'self.catalog_tabs.addTab(page_scroll, title)' in text
-    assert 'models_page = add_settings_tab("Models")' in text
-    assert 'upscale_page = add_settings_tab("AI Upscaler")' in text
-    assert 'ultimate_page = add_settings_tab("Ultimate")' in text
-    assert 'lora_page = add_settings_tab("LoRA")' in text
-    assert 'upscale_page.addWidget(esrgan_card)' in text
-    assert 'ultimate_page.addWidget(ultimate_card)' in text
-    assert 'lora_page.addWidget(self.lora_settings_group)' in text
+    assert 'self.catalog_tabs.addTab(page_scroll, title)' in dialog
+    assert 'models_page = add_settings_tab("Models")' in dialog
+    assert 'add_settings_tab("AI Upscaler")' not in dialog
+    assert 'ultimate_page = add_settings_tab("Ultimate")' in dialog
+    assert 'lora_page = add_settings_tab("LoRA")' in dialog
+    assert 'ultimate_page.addWidget(esrgan_card)' in dialog
+    assert 'ultimate_page.addWidget(ultimate_card)' in dialog
+    assert 'lora_page.addWidget(self.lora_settings_group)' in dialog
     assert 'self.btn_lora_toggle = self._make_feature_toggle_button("lora")' in text
     assert 'content_layout.addLayout(self._make_feature_toggle_row())' in text
     assert 'root.addLayout(self._make_feature_toggle_row())' in text
     assert 'right.addRow(self._make_feature_toggle_row())' not in text
-    assert 'no separate Real-ESRGAN popup' in text
+    assert 'no separate Real-ESRGAN popup' in dialog
     assert 'top.addWidget(self.btn_ultimate_toggle)' not in text
-    assert 'top.addWidget(self.btn_auto_realesrgan)' not in text
     assert 'btn_realesrgan_settings_shortcut' not in text
     assert 'show_realesrgan_settings' not in text
-
 
 def test_sdcpp_live_preview_parser_reads_native_preview_object_every_step():
     source = read_source()
@@ -2508,19 +2521,22 @@ def test_gpu_only_never_routes_text_encoder_or_weights_to_cpu():
         assert placement["auto_fit_mode"] == "off"
 
 
-def test_realesrgan_output_dimensions_are_checked_and_tile_default_is_conservative():
+def test_selected_ai_upscaler_output_dimensions_are_checked_and_tiles_are_configurable():
     source = read_source()
     assert 'int(options.get("upscale_tile", 0))' in source
-    assert "Real-ESRGAN returned unexpected dimensions" in source
-    assert "incompatible or mismatched NCNN model pair" in source
+    assert "AI upscaler returned unexpected dimensions" in source
+    assert "selected model's native scale or model files may be incompatible" in source
+    assert 'tile not in (0, 128, 200, 256, 384, 512, 600, 768, 1024)' in source
 
-
-def test_ultimate_runs_global_reconstruction_before_tile_refinement():
+def test_ultimate_runs_qwen_reconstruction_then_selected_ai_upscaler_then_tiles():
     source = read_source()
     start = source.index('    def _enhance_qwen_output(')
     end = source.index('    def process(self, job: Job)', start)
     body = source[start:end]
     assert 'Ultimate two-stage upscale' in body
     assert 'base = self._enhance_with_retries(' in body
-    assert 'Enhance canvas {stage_width}×{stage_height}' in body
+    assert 'self._upscale_image_with_selected_model(' in body
+    assert 'selected AI model' in body
     assert 'requested_ultimate_scale = max(1, min(4, int(ultimate_scale or 2)))' in body
+    assert 'stage_result.resize((requested_width, requested_height), Image.Resampling.LANCZOS)' not in body
+
