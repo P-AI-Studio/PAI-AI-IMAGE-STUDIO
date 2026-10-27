@@ -38,6 +38,7 @@ def test_missing_models_open_model_catalog_before_native_runtime_download():
 
     assert load_method.index("catalog._profile_has_verified_catalog_assets()") < load_method.index("self._configure_engine_from_ui()")
     assert "self.download_model_bundle()" in load_method
+    assert load_method.index("if self.download_model_bundle():") < load_method.index("self.load_model_async()")
     assert "The native engine download will start only after the required model files are ready." in load_method
     assert ensure_method.index("parts = self._find_model_parts(model_dir)") < ensure_method.index("executable = self._runtime_executable()")
 
