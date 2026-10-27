@@ -35,7 +35,7 @@ VALID_MEMORY_MODES: tuple[str, ...] = ("auto", "full_gpu", "low_vram")
 VALID_PREVIEW_METHODS: tuple[str, ...] = ("proj", "tae", "vae", "none")
 
 APP_NAME = "P.AI AI IMAGE STUDIO"
-APP_VERSION = "1.0.0-beta.1"  # Semantic version; beta.1 is the first public beta
+APP_VERSION = "1.0.0-beta.2"  # Semantic version; beta.2 fixes release packaging and publishing safety
 DISPLAY_VERSION = "Version 1 Beta"
 SETTINGS_VERSION = 44
 MAX_INFERENCE_SIDE = 2048
