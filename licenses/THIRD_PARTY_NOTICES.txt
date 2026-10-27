@@ -1,0 +1,41 @@
+P.AI AI IMAGE STUDIO — Version 1 Beta — Third-party notices (v1.0.0-beta.1)
+
+1) Native inference engine
+   Upstream project: https://github.com/leejet/stable-diffusion.cpp
+   Bundled runtime release: https://github.com/leejet/stable-diffusion.cpp/releases/tag/master-964-1d0a58a
+   Main CUDA runtime SHA-256: 2f08572e143f0b15a764197ea937d219dd70f0cc7eefb30eb84c9dae6a7cba6d
+   This kit uses the native sd-server runtime and retains upstream license/notice files when building the redistributable app.
+   The companion CUDA 12 archive is checked for required DLLs and CRC/ZIP validity; this release did not publish an independently verified upstream SHA pin for that companion asset.
+
+2) Qwen-Image-2.1 Turbo denoiser weights
+   Source: https://huggingface.co/AtomicChat/Qwen-Image-2.1-Turbo-GGUF
+   Model page declares the Qwen Research License. Review its current terms before public or commercial distribution.
+   Its card documents an eight-step fixed sigma schedule and provides denoiser GGUF variants.
+
+3) Uncensored Qwen-Image Turbo text encoder and vision projector
+   Source: https://huggingface.co/AtomicChat/Qwen-Image-2.1-Turbo-Uncensored-GGUF
+   Model page declares Apache-2.0. The project card states that this repo contains the modified text encoder and projector; it points to the paired AtomicChat Turbo repo for the image denoiser. Retain license and attribution requirements.
+
+4) Qwen-Image-2.1 VAE
+   Source: https://huggingface.co/Comfy-Org/Qwen-Image-2.1
+   AtomicChat's model card identifies this repository's `vae/qwen_image_2.1_vae_bf16.safetensors` as the compatible VAE and says its tensors are identical to Turbo's VAE. Review the source repository's terms before redistribution.
+
+5) PySide6 / Qt for Python
+   https://doc.qt.io/qtforpython-6/licenses.html
+
+6) Pillow
+   https://pillow.readthedocs.io/en/stable/about.html#license
+
+7) Real-ESRGAN NCNN Vulkan portable upscaler (downloaded on first use)
+   Upstream: https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan
+   Official Windows release: https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases/tag/v0.2.5.0
+   The portable executable and pretrained models are stored under the user's LocalAppData folder, not bundled into this source kit. Review the upstream LICENSE before redistribution.
+
+This index does not replace any upstream license texts. Model weights and native runtimes are downloaded from their publishers; P.AI does not relicense these assets. The AtomicChat model cards do not supply catalog-level SHA-256 pins for all model files, so the app records locally computed digests for later local-file integrity checks rather than representing them as official publisher pins.
+
+8) llama.cpp Windows x64 Windows x64 runtime with configured GPU offload for local grounding (downloaded on user request)
+   Upstream: https://github.com/ggml-org/llama.cpp
+   Windows binary release tag used by this source release: https://github.com/ggml-org/llama.cpp/releases/tag/b11744
+   The project is MIT-licensed. The executable archive is downloaded on first setup, extracted after ZIP/CRC and path validation, and is not bundled in the source ZIP.
+
+Current v1.0.0-beta.1 Close-up uses the text encoder and matched vision projector selected in Model Catalog; this source kit does not separately download or redistribute another Qwen3-VL encoder for grounding.

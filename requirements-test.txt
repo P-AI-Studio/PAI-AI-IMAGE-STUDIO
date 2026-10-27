@@ -1,0 +1,3 @@
+# Full application dependencies plus the source regression-test runner.
+-r requirements.txt
+pytest>=8,<9

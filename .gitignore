@@ -1,0 +1,43 @@
+# Local Python runtime / environment / setup cache
+.python/
+.venv/
+.setup-cache/
+.system-python-path.txt
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local build outputs and verified download cache
+.build-cache/
+build/
+dist/
+build-installer/
+dist-installer/
+*.spec
+*.part
+*.tmp
+*.log
+
+# Portable application data, models, LoRAs, runtime binaries and generated images
+/data/
+/cache/
+/models/
+/loras/
+/runtime/
+/images/
+/settings.json
+/model-manifest.json
+/model-selection.json
+
+# Python tooling / package metadata
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+coverage.xml
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
