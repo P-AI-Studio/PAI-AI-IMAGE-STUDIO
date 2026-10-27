@@ -763,13 +763,15 @@ def test_requirements_bat_uses_system_python_and_nvidia_driver():
     assert "PySide6" in req and "Pillow" in req and "certifi" in req and "opencv-python-headless" not in req
 
 
-def test_release_version_is_semver_beta_1():
+def test_release_version_is_semver_beta_2():
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    assert version == "1.0.0-beta.1"
+    assert version == "1.0.0-beta.2"
     assert f'APP_VERSION = "{version}"' in read_source()
     installer = (ROOT / "installer.iss").read_text(encoding="utf-8")
     assert f'#define AppVersion "{version}"' in installer
-    assert f"Setup-{version}" in installer
+    assert "OutputBaseFilename=PAI-AI-Image-Studio-Setup-{#AppVersion}" in installer
+    build_script = (ROOT / "build_release.ps1").read_text(encoding="utf-8")
+    assert '"/DAppVersion=$AppVersion"' in build_script
     assert f"`{version}`" in (ROOT / "README.md").read_text(encoding="utf-8")
 
 
