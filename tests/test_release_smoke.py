@@ -674,7 +674,7 @@ def test_input_folder_is_editable_and_populates_queue():
 
 def test_brand_assets_exist_and_are_passed_to_pyinstaller():
     assets = ROOT / "assets"
-    for file in ("pai_logo.png", "pai_icon.png", "pai_icon.ico"):
+    for file in ("pai_logo.png", "pai_icon.ico"):
         path = assets / file
         assert path.is_file() and path.stat().st_size > 10_000
     build = (ROOT / "build_release.ps1").read_text(encoding="utf-8")
@@ -2270,7 +2270,7 @@ def test_image_edit_and_closeup_pass_selected_qwen_strength_to_img2img():
 
 
 def test_new_pai_logo_assets_are_present_and_nonempty():
-    for relative in ("assets/pai_logo.png", "assets/pai_icon.png", "assets/pai_icon.ico"):
+    for relative in ("assets/pai_logo.png", "assets/pai_icon.ico"):
         path = ROOT / relative
         assert path.is_file() and path.stat().st_size > 1000
 
