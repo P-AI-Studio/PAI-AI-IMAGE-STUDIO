@@ -2,6 +2,18 @@
 
 All notable changes to **P.AI AI Image Studio** are documented in this file.
 
+## [1.0.0-beta.2] — Version 1 Beta hotfix (2026-10-27)
+
+- **Compact installer:** Exclude the large native engine and CUDA companion runtime from the Windows installer; download and verify them on first model load instead. Model weights remain a separate, user-selected Model Catalog download.
+- **Installer build:** Replace the fragile `Get-FileHash` command dependency with direct .NET SHA-256 hashing for native runtime integrity checks.
+- **Release CI:** Run the Windows installer build directly under PowerShell and on pull requests, so packaging failures are caught before tagging a release.
+- **Version consistency:** Read the application version from `VERSION` and use it for the Inno Setup output filename.
+- **Safe publishing:** Remove force-push and force-tag behavior; refuse to overwrite an existing release tag and let GitHub Actions publish the installer.
+- **Release hygiene:** Remove a cached diagnostic log from the source ZIP and remove hard-coded automated-test totals from the documentation.
+- **Unified Ultimate AI upscaling:** Replace the separate Ultimate and automatic Real-ESRGAN switches with one Ultimate toggle and one model selector in Model Catalog → Ultimate. The selected model is used for learned super-resolution between the first Qwen reconstruction and the final Qwen tile-refinement stage; the old Lanczos-only enlargement is no longer the main upscale step.
+- **Community photo upscalers:** Add verified NCNN model choices including RealESRGAN General x4 v3 / WDN, NMKD Siax 200k, LSDIR+ C, Nomos8k SC, HFA2k, LSDIR Compact C3, UniScale Restore, and optional NMKD Superscale SP. Downloads remain outside the installer and use a pinned model manifest with file-size and Git blob hash validation.
+- **Ultimate tile coverage:** Use an adaptive full-coverage tile grid. At 50% coverage Ultimate uses a 2×2 grid; at lower coverage it adds rows/columns instead of leaving unrefined strips between tiles. Add tile-size options 200 and 600.
+
 ## [1.0.0-beta.1] — Version 1 Beta (2026-10-25)
 
 ### Highlights & Core Engine Architecture
@@ -22,4 +34,4 @@ All notable changes to **P.AI AI Image Studio** are documented in this file.
 ### Workflows, Preview & Validation
 - **Six Integrated Workflows:** Image Generate, Image Edit, Enhance / Upscale (`Balanced`, `Strong`, `Maximum` profiles), Close-up / Smart Zoom (Qwen3-VL semantic grounding + interactive manual click focus), Square 1:1 Outpaint, and standalone Real-ESRGAN / Real-ESRNet super-resolution.
 - **Interactive 7-Mode Comparison Canvas:** Original, Enhanced, Slider, Side by Side, Overlay, Difference, and Flicker modes.
-- **Comprehensive Test Suite:** Verified with 299 automated unit, validation, regression, and release-smoke tests (`tests/`).
+- **Comprehensive Test Suite:** Includes automated unit, validation, regression, and release-smoke tests in `tests/`; the exact count is reported by CI and may change over time.

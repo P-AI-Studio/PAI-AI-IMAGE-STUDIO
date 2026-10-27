@@ -42,6 +42,11 @@ from .constants import (
     REALESRGAN_HF_NCNN_BASE,
     REALESRGAN_MODEL_NAMES,
     REALESRGAN_MODEL_NATIVE_SCALES,
+    REALESRGAN_CATALOG_BY_ID,
+    UPSCAYL_NCNN_URL,
+    UPSCAYL_NCNN_SHA256,
+    UPSCAYL_NCNN_ARCHIVE_SIZE,
+    UPSCAYL_NCNN_MODEL_BASE_URL,
     realesrgan_native_scale,
     REALESRGAN_NCNN_URLS,
     _download_ssl_context,
@@ -1642,8 +1647,179 @@ class LocalEngine:
         self.log(f"Real-ESRGAN portable runtime ready · SHA-256={hashlib.sha256(archive.read_bytes()).hexdigest()}")
         return exe
 
+    def _ensure_upscayl_runtime(self) -> Path:
+        """Install a pinned Upscayl-NCNN Windows runner for curated custom NCNN models."""
+        if os.name != "nt":
+            raise RuntimeError("The bundled Upscayl-NCNN runner currently supports Windows x64 only.")
+        runtime_root = DATA_ROOT / "runtime" / "upscayl-ncnn"
+        exe = next((p for p in runtime_root.rglob("upscayl-bin.exe") if p.is_file()), None) if runtime_root.exists() else None
+        if exe is not None:
+            return exe
+
+        cache_dir = CACHE_DIR / "runtime-downloads"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        archive = cache_dir / "upscayl-bin-20251207-174704-windows.zip"
+        part = archive.with_suffix(archive.suffix + ".part")
+
+        def valid_archive(path: Path) -> bool:
+            try:
+                if not path.is_file() or path.stat().st_size != UPSCAYL_NCNN_ARCHIVE_SIZE:
+                    return False
+                digest = _sha256_file(path, self.force_stop)
+                if digest.lower() != UPSCAYL_NCNN_SHA256.lower():
+                    return False
+                with zipfile.ZipFile(path, "r") as zf:
+                    if zf.testzip() is not None:
+                        return False
+                    return any(Path(n.replace("\\", "/")).name.lower() == "upscayl-bin.exe" for n in zf.namelist())
+            except (OSError, zipfile.BadZipFile, RuntimeError, Aborted):
+                return False
+
+        if not valid_archive(archive):
+            archive.unlink(missing_ok=True)
+            part.unlink(missing_ok=True)
+            self.status_callback("Downloading the pinned Upscayl-NCNN runtime…")
+            request = urllib.request.Request(
+                UPSCAYL_NCNN_URL,
+                headers={"User-Agent": f"P.AI-Image-Studio/{APP_VERSION}", "Accept-Encoding": "identity"},
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=180, context=_download_ssl_context()) as response, part.open("wb") as out:
+                    expected_header = response.headers.get("Content-Length")
+                    received = 0
+                    while True:
+                        if self.force_stop.is_set():
+                            raise Aborted()
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        received += len(chunk)
+                        self.status_callback(f"Downloading Upscayl-NCNN runtime · {received / 1e6:.1f} / {UPSCAYL_NCNN_ARCHIVE_SIZE / 1e6:.1f} MB")
+                    out.flush()
+                    os.fsync(out.fileno())
+                if expected_header and expected_header.isdigit() and received != int(expected_header):
+                    raise RuntimeError(f"Incomplete Upscayl-NCNN response: received {received} bytes, expected {expected_header}.")
+                if not valid_archive(part):
+                    raise RuntimeError("The Upscayl-NCNN archive failed its pinned SHA-256, size, executable, or ZIP CRC check.")
+                part.replace(archive)
+            except Exception:
+                part.unlink(missing_ok=True)
+                raise
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archive, "r") as zf:
+            if zf.testzip() is not None:
+                raise RuntimeError("The Upscayl-NCNN runtime ZIP has invalid CRC data.")
+            for info in zf.infolist():
+                target = validate_archive_member_path(runtime_root, info.filename)
+                if info.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info, "r") as src, target.open("wb") as dst:
+                    shutil.copyfileobj(src, dst, length=1024 * 1024)
+        exe = next((p for p in runtime_root.rglob("upscayl-bin.exe") if p.is_file()), None)
+        if exe is None:
+            raise RuntimeError("The verified Upscayl-NCNN archive did not contain upscayl-bin.exe.")
+        self.log(f"Upscayl-NCNN runtime installed and verified · SHA-256={UPSCAYL_NCNN_SHA256}.")
+        return exe
+
+    @staticmethod
+    def _git_blob_sha1(path: Path) -> str:
+        """Calculate the Git object SHA-1 (blob header + bytes) used by the pinned model manifest."""
+        size = path.stat().st_size
+        digest = hashlib.sha1()
+        digest.update(("blob %d\0" % size).encode("ascii"))
+        with path.open("rb") as stream:
+            while True:
+                chunk = stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _ensure_upscayl_model_pair(self, exe: Path, model_name: str) -> Path:
+        """Download a pinned custom NCNN model pair and verify exact sizes and Git blob hashes."""
+        meta = REALESRGAN_CATALOG_BY_ID.get(model_name)
+        if not meta or meta.get("backend") != "upscayl":
+            raise RuntimeError(f"No pinned Upscayl-NCNN model manifest exists for '{model_name}'.")
+        model_dir = exe.parent / "models"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        stem = str(meta["model_file"])
+        for suffix in ("param", "bin"):
+            filename = f"{stem}.{suffix}"
+            target = model_dir / filename
+            expected_size = int(meta[f"{suffix}_size"])
+            expected_blob = str(meta[f"{suffix}_blob_sha1"]).lower()
+
+            def is_valid(path: Path) -> bool:
+                try:
+                    return path.is_file() and path.stat().st_size == expected_size and self._git_blob_sha1(path).lower() == expected_blob
+                except OSError:
+                    return False
+
+            if is_valid(target):
+                continue
+            part = target.with_suffix(target.suffix + ".part")
+            part.unlink(missing_ok=True)
+            url = UPSCAYL_NCNN_MODEL_BASE_URL + urllib.parse.quote(filename)
+            self.status_callback(f"Downloading Ultimate model asset · {filename}…")
+            self.log(f"Fetching pinned community NCNN model asset: {url}")
+            request = urllib.request.Request(
+                url,
+                headers={"User-Agent": f"P.AI-Image-Studio/{APP_VERSION}", "Accept-Encoding": "identity"},
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=180, context=_download_ssl_context()) as response, part.open("wb") as out:
+                    expected_header = response.headers.get("Content-Length")
+                    received = 0
+                    while True:
+                        if self.force_stop.is_set():
+                            raise Aborted()
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        received += len(chunk)
+                        self.status_callback(f"Downloading {filename} · {received / 1e6:.1f} / {expected_size / 1e6:.1f} MB")
+                    out.flush()
+                    os.fsync(out.fileno())
+                if expected_header and expected_header.isdigit() and received != int(expected_header):
+                    raise RuntimeError(f"Incomplete {filename} response: received {received} bytes, expected {expected_header}.")
+                if received != expected_size or self._git_blob_sha1(part).lower() != expected_blob:
+                    raise RuntimeError(f"Downloaded NCNN model asset '{filename}' failed its pinned size or Git blob SHA-1 validation.")
+                os.replace(part, target)
+            except Exception:
+                part.unlink(missing_ok=True)
+                raise
+        self.log(f"Verified custom NCNN model '{model_name}' installed in {model_dir}.")
+        return model_dir
+
+    def _upscale_image_with_selected_model(
+        self, image: Image.Image, options: dict[str, Any], target_size: tuple[int, int]
+    ) -> Image.Image:
+        """Run the selected learned NCNN upscaler on an in-memory Ultimate stage, then fit exact canvas."""
+        temp_root = CACHE_DIR / "ultimate-upscale-temp" / uuid.uuid4().hex
+        temp_root.mkdir(parents=True, exist_ok=False)
+        source_path = temp_root / "ultimate-stage.png"
+        try:
+            image.convert("RGB").save(source_path, format="PNG")
+            result_path = self._run_upscale_file(source_path, options, temp_root)
+            with Image.open(result_path) as opened:
+                result = ImageOps.exif_transpose(opened).convert("RGB")
+            wanted = (max(1, int(target_size[0])), max(1, int(target_size[1])))
+            if result.size != wanted:
+                self.log(
+                    f"Selected AI upscaler produced {result.width}×{result.height}; "
+                    f"fitting its learned result to the exact Ultimate canvas {wanted[0]}×{wanted[1]}."
+                )
+                result = result.resize(wanted, Image.Resampling.LANCZOS)
+            return result
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+
     def _run_upscale_file(self, input_path: Path, options: dict[str, Any], output_dir: Optional[Path] = None) -> Path:
-        """Run Real-ESRGAN/Real-ESRNet locally through Vulkan at the selected model's native scale."""
+        """Run the selected learned NCNN photo upscaler locally through Vulkan."""
         input_path = input_path.expanduser().resolve()
         if not input_path.is_file():
             raise FileNotFoundError(f"Upscaler input file was not found: {input_path}")
@@ -1651,21 +1827,28 @@ class LocalEngine:
         allowed_models = set(REALESRGAN_MODEL_NAMES.values()) | set(REALESRGAN_MODEL_NATIVE_SCALES.keys())
         if model_name not in allowed_models:
             raise ValueError(f"Unknown upscaler model: {model_name}")
-        # Always run each Real-ESRGAN model at its own intrinsic native scale (4x for x4plus/x4plus-anime,
-        # or 2x/3x/4x for the corresponding AnimeVideo-v3 model variant). No manual scale override is used.
         scale = realesrgan_native_scale(model_name)
-        cli_model_name = "realesr-animevideov3" if model_name.startswith("realesr-animevideov3") else model_name
         tile = max(0, min(1024, int(options.get("upscale_tile", 0))))
-        if tile not in (0, 128, 256, 384, 512, 768, 1024):
+        if tile not in (0, 128, 200, 256, 384, 512, 600, 768, 1024):
             tile = 256
+
+        model_meta = REALESRGAN_CATALOG_BY_ID.get(model_name, {})
+        backend = str(model_meta.get("backend", "official"))
+        if backend == "upscayl":
+            exe = self._ensure_upscayl_runtime()
+            model_dir = self._ensure_upscayl_model_pair(exe, model_name)
+            cli_model_name = str(model_meta.get("model_file", model_name))
+        else:
+            exe = self._ensure_realesrgan_runtime()
+            cli_model_name = "realesr-animevideov3" if model_name.startswith("realesr-animevideov3") else model_name
+            self._ensure_realesrgan_model_pair(exe, cli_model_name, scale)
+            model_dir = exe.parent / "models"
 
         target_dir = output_dir or input_path.parent
         target_dir.mkdir(parents=True, exist_ok=True)
         stamp = f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:4]}"
         target = target_dir / f"{input_path.stem}_AI{scale}x_{stamp}.png"
 
-        exe = self._ensure_realesrgan_runtime()
-        self._ensure_realesrgan_model_pair(exe, cli_model_name, scale)
         temp_input: Optional[Path] = None
         input_for_engine = input_path
         if input_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
@@ -1676,21 +1859,35 @@ class LocalEngine:
                 ImageOps.exif_transpose(image).convert("RGB").save(temp_input, format="PNG")
             input_for_engine = temp_input
 
-        log_path = CACHE_DIR / "engine" / "realesrgan.log"
+        log_name = "upscayl-ncnn.log" if backend == "upscayl" else "realesrgan.log"
+        log_path = CACHE_DIR / "engine" / log_name
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        args = [str(exe), "-i", str(input_for_engine), "-o", str(target), "-n", cli_model_name,
-                "-s", str(scale), "-t", str(tile), "-j", "1:2:2"]
+        if backend == "upscayl":
+            args = [
+                str(exe), "-i", str(input_for_engine), "-o", str(target),
+                "-m", str(model_dir), "-n", cli_model_name,
+                "-z", str(scale), "-s", str(scale), "-t", str(tile), "-j", "1:2:2",
+            ]
+        else:
+            args = [
+                str(exe), "-i", str(input_for_engine), "-o", str(target),
+                "-n", cli_model_name, "-s", str(scale), "-t", str(tile), "-j", "1:2:2",
+            ]
         if bool(options.get("upscale_tta", False)):
             args.append("-x")
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
         env = os.environ.copy()
-        self.status_callback(f"AI Upscale · {model_name} · native {scale}× · Vulkan GPU running…")
-        self.log(f"Running AI upscaler: {model_name} (CLI model={cli_model_name}), native scale={scale}x, tile={tile} (Vulkan auto-device).")
+        self.status_callback(f"Ultimate · {model_name} · native {scale}× · Vulkan GPU running…")
+        self.log(
+            f"Running selected AI upscaler: {model_name} · backend={backend} · native scale={scale}× · "
+            f"tile={tile} · Vulkan."
+        )
         try:
             with log_path.open("wb") as log_handle:
-                proc = subprocess.Popen(args, cwd=str(exe.parent), stdout=log_handle,
-                                        stderr=subprocess.STDOUT, env=env,
-                                        creationflags=creationflags, close_fds=(os.name != "nt"))
+                proc = subprocess.Popen(
+                    args, cwd=str(exe.parent), stdout=log_handle, stderr=subprocess.STDOUT,
+                    env=env, creationflags=creationflags, close_fds=(os.name != "nt"),
+                )
                 while proc.poll() is None:
                     if self.force_stop.wait(0.35):
                         proc.terminate()
@@ -1704,8 +1901,8 @@ class LocalEngine:
             if return_code != 0 or not target.is_file() or target.stat().st_size < 1024:
                 details = self._tail_file(log_path, 5000)
                 raise RuntimeError(
-                    f"Real-ESRGAN could not process the image (exit code {return_code}). "
-                    "Check the graphics driver / Vulkan support.\n\n" + details
+                    f"The selected AI upscaler could not process the image (exit code {return_code}). "
+                    "Check the graphics driver / Vulkan support and the selected model files.\n\n" + details
                 )
             with Image.open(target) as check_img:
                 check_img.verify()
@@ -1716,12 +1913,12 @@ class LocalEngine:
             expected_w, expected_h = source_w * scale, source_h * scale
             if (result_w, result_h) != (expected_w, expected_h):
                 raise RuntimeError(
-                    f"Real-ESRGAN returned unexpected dimensions {result_w}×{result_h}; expected "
-                    f"{expected_w}×{expected_h}. This can indicate an incompatible or mismatched NCNN model pair. "
-                    f"See the Real-ESRGAN log at {log_path}."
+                    f"AI upscaler returned unexpected dimensions {result_w}×{result_h}; expected "
+                    f"{expected_w}×{expected_h}. The selected model's native scale or model files may be incompatible. "
+                    f"See {log_path}."
                 )
             label = f"{scale}× native ({result_w}×{result_h})"
-            self.status_callback(f"AI Upscale complete · {label} · {target.name}")
+            self.status_callback(f"Ultimate · selected AI model complete · {label} · {target.name}")
             self.log(f"AI upscale saved: {target} ({self._human_size(target.stat().st_size)}).")
             return target
         finally:
@@ -2225,7 +2422,7 @@ class LocalEngine:
             raise RuntimeError("No enhancement attempt produced an image.")
         if best_diff > warn_diff:
             self.log(f"Warning: best structural difference is {best_diff:.2f}, above warning threshold {warn_diff:.2f}.")
-        self.log("Qwen-Image 2.1 full-frame enhancement pass complete; external Real-ESRGAN/Real-ESRNet is not chained into this workflow.")
+        self.log("Qwen-Image 2.1 full-frame enhancement pass complete; Ultimate applies the selected learned upscaler only when enabled.")
         return best
 
     @staticmethod
@@ -2276,10 +2473,10 @@ class LocalEngine:
                                          quality: str, steps: int, detail_mode: str = "max_detail",
                                          use_img2img: bool = True, tile_strength: Optional[float] = None,
                                          detail_profile: str = "balanced", force: bool = False) -> Image.Image:
-        """Use Qwen itself for local detail refinement after its full-frame pass exceeds 2048 px.
+        """Use Qwen itself for local detail refinement after the selected AI upscaler.
 
-        This avoids using Real-ESRGAN in the Enhance workflow. A global Qwen pass sets the
-        composition; overlapping local passes then restore texture at the requested output size.
+        Ultimate establishes composition with Qwen, runs the selected learned NCNN upscaler,
+        then uses overlapping Qwen crops to restore local texture at output size.
         """
         image = image.convert("RGB")
         width, height = image.size
@@ -2320,10 +2517,12 @@ class LocalEngine:
             tile_w = min(width, tile_limit)
             tile_h = min(height, tile_limit)
         if detail_mode == "ultimate":
-            x_starts = [0, max(0, width - tile_w)] if width > 1 else [0]
-            y_starts = [0, max(0, height - tile_h)] if height > 1 else [0]
+            # Full-coverage starts: 50% coverage remains a 2×2 grid, while smaller
+            # coverage automatically adds rows/columns instead of leaving untreated gaps.
+            x_starts = self._tile_starts(width, tile_w)
+            y_starts = self._tile_starts(height, tile_h)
             refinement_passes = max(1, min(2, int(getattr(self, "_active_ultimate_refinement_passes", 1))))
-            tile_label = f"Ultimate Tile Refinement · Qwen 4-tile (2×2) overlapping grid · denoise {effective_tile_strength:.2f} · coverage {coverage:.0%} · passes {refinement_passes}"
+            tile_label = f"Ultimate Tile Refinement · full-coverage {len(x_starts)}×{len(y_starts)} Qwen grid · denoise {effective_tile_strength:.2f} · coverage {coverage:.0%} · passes {refinement_passes}"
         else:
             x_starts = self._tile_starts(width, tile_w)
             y_starts = self._tile_starts(height, tile_h)
@@ -2451,7 +2650,8 @@ class LocalEngine:
                              warn_diff: float, steps: int, detail_mode: str = "fast",
                              use_img2img: bool = True, strength: Optional[float] = None,
                              tile_strength: Optional[float] = None, detail_profile: str = "balanced",
-                             ultimate_scale: int = 2) -> Image.Image:
+                             ultimate_scale: int = 2,
+                             upscale_options: Optional[dict[str, Any]] = None) -> Image.Image:
         detail_mode_norm = str(detail_mode or "fast").strip().lower()
         stage_width, stage_height = int(width), int(height)
         requested_width = min(MAX_OUTPUT_SIDE, max(64, int(width)))
@@ -2475,8 +2675,8 @@ class LocalEngine:
                 self.log(
                     f"Enhance Ultimate · Pass 1 Qwen at {native_width}×{native_height} "
                     f"(1/{requested_ultimate_scale} of requested {requested_width}×{requested_height}); "
-                    f"then Lanczos {effective_ultimate_scale:g}× upscale to {requested_width}×{requested_height} "
-                    f"and run overlapping Qwen detail tiles."
+                    f"then selected learned AI upscaler ({str((upscale_options or {}).get('upscale_model', 'realesrgan-x4plus'))}) "
+                    f"to {requested_width}×{requested_height} and run overlapping Qwen detail tiles."
                 )
             else:
                 self.log(
@@ -2491,14 +2691,16 @@ class LocalEngine:
                 max_attempts, retry_diff, warn_diff, steps,
                 use_img2img=use_img2img, strength=strength,
             )
-            stage_result = base if base.size == (stage_width, stage_height) else base.resize((stage_width, stage_height), Image.Resampling.LANCZOS)
-            result = (stage_result if (requested_width, requested_height) == (stage_width, stage_height)
-                      else stage_result.resize((requested_width, requested_height), Image.Resampling.LANCZOS))
-            self._publish_live_preview(result, marker=("ultimate-stage-1-then-scale", stage_width, stage_height, requested_width, requested_height))
+            # Preserve the native Qwen reconstruction for the learned upscaler. Do not enlarge
+            # it with a fixed interpolation kernel before AI super-resolution.
+            result = self._upscale_image_with_selected_model(
+                base, upscale_options or {}, (requested_width, requested_height)
+            )
+            self._publish_live_preview(result, marker=("ultimate-stage-1-ai-upscale", native_width, native_height, requested_width, requested_height))
             self.log(
                 f"Ultimate two-stage upscale · Qwen stage-1 reconstruction at {native_width}×{native_height} → "
-                f"Enhance canvas {stage_width}×{stage_height} → Lanczos Ultimate scale {effective_ultimate_scale:g}× → "
-                f"{requested_width}×{requested_height} → overlapping-tile refinement. "
+                f"selected AI model {str((upscale_options or {}).get('upscale_model', 'realesrgan-x4plus'))} → "
+                f"{requested_width}×{requested_height} → overlapping Qwen detail refinement. "
                 f"Main strength={float(strength if strength is not None else ENHANCE_IMG2IMG_STRENGTH):.2f}."
             )
         else:
@@ -2510,7 +2712,7 @@ class LocalEngine:
         needs_standard_refinement = max(requested_width, requested_height) <= MAX_INFERENCE_SIDE and detail_mode_norm != "fast"
         if needs_highres_tiles or needs_standard_refinement:
             if detail_mode_norm == "ultimate":
-                self.log("Ultimate · running four full-coverage Qwen detail tiles on the Lanczos-upscaled canvas.")
+                self.log("Ultimate · running full-coverage Qwen detail tiles on the learned AI-upscaled canvas.")
             elif needs_standard_refinement:
                 self.log(
                     f"Qwen profile={profile_key} · second denoise/detail pass enabled at {requested_width}×{requested_height}; "
@@ -2581,7 +2783,7 @@ class LocalEngine:
                 return int(base_seed) + index
             return int(base_seed)
 
-        # Ultimate and its Lanczos scaling run strictly when Ultimate is enabled by the user.
+        # Ultimate and its selected learned AI upscaler run only when the single Ultimate toggle is enabled.
         if job.workflow in {"enhance", "lora_closeup_1024", "square_1_1"}:
             if job.prompt and self._needs_english_translation(job.prompt):
                 job.prompt = self._translate_image_prompt_to_english(job.prompt, job.workflow)
@@ -2608,13 +2810,13 @@ class LocalEngine:
                     if max(job.width, job.height) > MAX_INFERENCE_SIDE or profile_key in {"balanced", "strong", "maximum"}:
                         if ultimate_enabled:
                             target_sz = (int(job.width), int(job.height))
-                            if target_sz != result.size:
-                                self.log(
-                                    f"Image Generate Ultimate two-stage upscale · Pass 1 Qwen at {gen_stage1_size[0]}×{gen_stage1_size[1]} → "
-                                    f"Lanczos {ult_scale}× upscale to {target_sz[0]}×{target_sz[1]} → 4-tile Ultimate refinement."
-                                )
-                                result = result.resize(target_sz, Image.Resampling.LANCZOS)
-                                self._publish_live_preview(result, marker=("generate-stage-1-then-scale", gen_stage1_size[0], gen_stage1_size[1], target_sz[0], target_sz[1]))
+                            self.log(
+                                f"Image Generate Ultimate · Qwen stage-1 at {result.width}×{result.height} → "
+                                f"selected AI upscaler {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → "
+                                f"{target_sz[0]}×{target_sz[1]} → full-coverage Qwen tile refinement."
+                            )
+                            result = self._upscale_image_with_selected_model(result, job.custom, target_sz)
+                            self._publish_live_preview(result, marker=("generate-stage-1-ai-upscale", gen_stage1_size[0], gen_stage1_size[1], target_sz[0], target_sz[1]))
                         result = self._qwen_detail_refine_large_output(
                             result, effective_prompt, current_seed + 1000, job.quality, steps,
                             detail_mode="ultimate" if bool(job.custom.get("ultimate_qwen_upscale_enabled", False)) else "fast", use_img2img=True, tile_strength=profile_tile_strength,
@@ -2660,13 +2862,13 @@ class LocalEngine:
                 if max(job.width, job.height) > MAX_INFERENCE_SIDE or profile_key in QWEN_DETAIL_PROFILES:
                     if ultimate_enabled:
                         target_sz = (int(job.width), int(job.height))
-                        if target_sz != result.size:
-                            self.log(
-                                f"Image Edit Ultimate two-stage upscale · Pass 1 Qwen at {edit_stage1_size[0]}×{edit_stage1_size[1]} → "
-                                f"Lanczos {ult_scale}× upscale to {target_sz[0]}×{target_sz[1]} → 4-tile Ultimate refinement."
-                            )
-                            result = result.resize(target_sz, Image.Resampling.LANCZOS)
-                            self._publish_live_preview(result, marker=("edit-stage-1-then-scale", edit_stage1_size[0], edit_stage1_size[1], target_sz[0], target_sz[1]))
+                        self.log(
+                            f"Image Edit Ultimate · Qwen stage-1 at {result.width}×{result.height} → "
+                            f"selected AI upscaler {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → "
+                            f"{target_sz[0]}×{target_sz[1]} → full-coverage Qwen tile refinement."
+                        )
+                        result = self._upscale_image_with_selected_model(result, job.custom, target_sz)
+                        self._publish_live_preview(result, marker=("edit-stage-1-ai-upscale", edit_stage1_size[0], edit_stage1_size[1], target_sz[0], target_sz[1]))
                     result = self._qwen_detail_refine_large_output(
                         result, effective_prompt, edit_seed + 1000, job.quality, steps,
                         detail_mode="ultimate" if bool(job.custom.get("ultimate_qwen_upscale_enabled", False)) else "fast", use_img2img=True, tile_strength=profile_tile_strength,
@@ -2712,7 +2914,7 @@ class LocalEngine:
                     s1_w, s1_h = self._ultimate_stage1_size((job.width, job.height), True, ult_scale)
                     self.log(
                         f"Qwen Enhance reconstruction · profile={profile_key} · Ultimate=ON · Pass 1={s1_w}×{s1_h} → "
-                        f"Lanczos Ultimate scale={ult_scale}× → final={job.width}×{job.height} · "
+                        f"selected AI model {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → final={job.width}×{job.height} · "
                         f"denoise={effective_tile_strength:.2f} · coverage={self._active_ultimate_tile_coverage:.0%} · "
                         f"tile steps={int(job.custom.get('ultimate_qwen_steps', 8))} · overlapping tiles."
                     )
@@ -2726,7 +2928,8 @@ class LocalEngine:
                     float(job.custom.get("warn_diff", 18.0)), steps,
                     detail_mode, strength=profile_strength,
                     tile_strength=profile_tile_strength, detail_profile=profile_key,
-                    ultimate_scale=int(job.custom.get("ultimate_qwen_scale", 2) or 2) if ultimate_enabled else 1)
+                    ultimate_scale=int(job.custom.get("ultimate_qwen_scale", 2) or 2) if ultimate_enabled else 1,
+                    upscale_options=job.custom)
                 path = out_dir / f"enhance_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.png"
                 detail_metadata = qwen_detail_refinement_metadata(profile_key, detail_mode)
                 if detail_mode == "ultimate":
@@ -2944,13 +3147,13 @@ class LocalEngine:
                 if bool(job.custom.get("ultimate_qwen_upscale_enabled", False)):
                     profile_key = str(job.custom.get("qwen_detail_profile", "balanced"))
                     _profile_strength, profile_tile_strength = qwen_detail_profile_values(profile_key)
-                    if result.size != (final_side, final_side):
-                        self.log(
-                            f"Close-up Ultimate two-stage upscale · Pass 1 Qwen at {side}×{side} → "
-                            f"Lanczos {closeup_ult_scale}× upscale to {final_side}×{final_side} → 4-tile Ultimate refinement & seamless stitch."
-                        )
-                        result = result.resize((final_side, final_side), Image.Resampling.LANCZOS)
-                        self._publish_live_preview(result, marker=("closeup-stage-1-then-scale", side, final_side))
+                    self.log(
+                        f"Close-up Ultimate · Qwen stage-1 at {result.width}×{result.height} → "
+                        f"selected AI upscaler {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → "
+                        f"{final_side}×{final_side} → full-coverage Qwen detail refinement."
+                    )
+                    result = self._upscale_image_with_selected_model(result, job.custom, (final_side, final_side))
+                    self._publish_live_preview(result, marker=("closeup-stage-1-ai-upscale", side, final_side))
                     self.log(
                         f"Close-up · running Model Catalog Ultimate Qwen refinement "
                         f"(denoise={self._active_ultimate_denoise_strength:.2f}, coverage={self._active_ultimate_tile_coverage:.0%}, "
@@ -3130,17 +3333,20 @@ class LocalEngine:
                         raise Aborted()
                     profile_key = str(job.custom.get("qwen_detail_profile", "balanced"))
                     _profile_strength, profile_tile_strength = qwen_detail_profile_values(profile_key)
-                    if result.size != (final_side, final_side):
-                        self.log(f"Square 1:1 Ultimate two-stage upscale · Stage-1 Qwen output {side}×{side} → Lanczos {square_ult_scale}× upscale to {final_side}×{final_side} → 4-tile refinement.")
-                        result = result.resize((final_side, final_side), Image.Resampling.LANCZOS)
-                        if mode == "outpaint" and source_original is not None:
-                            _, _, final_margins = plan_square_outpaint(source_original, final_side)
-                            if final_margins is not None:
-                                result = composite_square_outpaint_result(
-                                    source_original, result, final_side, final_margins,
-                                    enhance=bool(job.enhance), feather=max(16, min(64, final_side // 24)),
-                                )
-                        self._publish_live_preview(result, marker=("square-stage-1-then-scale", side, final_side))
+                    self.log(
+                        f"Square 1:1 Ultimate · Qwen stage-1 at {result.width}×{result.height} → "
+                        f"selected AI upscaler {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → "
+                        f"{final_side}×{final_side} → full-coverage Qwen refinement."
+                    )
+                    result = self._upscale_image_with_selected_model(result, job.custom, (final_side, final_side))
+                    if mode == "outpaint" and source_original is not None:
+                        _, _, final_margins = plan_square_outpaint(source_original, final_side)
+                        if final_margins is not None:
+                            result = composite_square_outpaint_result(
+                                source_original, result, final_side, final_margins,
+                                enhance=bool(job.enhance), feather=max(16, min(64, final_side // 24)),
+                            )
+                    self._publish_live_preview(result, marker=("square-stage-1-ai-upscale", side, final_side))
                     self.log("Square 1:1 · Ultimate Qwen refinement is running on the completed final square output, after joint outpainting and source-core compositing.")
                     self.status_callback("Ultimate Qwen output refinement · final square image · overlapping tile pass…")
                     result = self._qwen_detail_refine_large_output(
@@ -3167,7 +3373,9 @@ class LocalEngine:
                 source_file.close()
         # Optional user-controlled Real-ESRGAN/Real-ESRNet post-process, independent from Qwen.
         # It runs only when the small global toolbar toggle was ON when the job was queued.
-        if bool(job.custom.get("auto_realesrgan_enabled", False)) and outputs and job.workflow != "upscale_only":
+        if (bool(job.custom.get("auto_realesrgan_enabled", False))
+                and not bool(job.custom.get("ultimate_qwen_upscale_enabled", False))
+                and outputs and job.workflow != "upscale_only"):
             original_outputs = list(outputs)
             self.log("Global ESRGAN toggle is ON · running the selected standalone Vulkan upscaler on workflow outputs.")
             for upscale_index, produced in enumerate(original_outputs, start=1):

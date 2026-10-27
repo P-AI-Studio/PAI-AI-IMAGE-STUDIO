@@ -1,4 +1,4 @@
-P.AI AI IMAGE STUDIO — Version 1 Beta — Third-party notices (v1.0.0-beta.1)
+P.AI AI IMAGE STUDIO — Version 1 Beta — Third-party notices (v1.0.0-beta.2)
 
 1) Native inference engine
    Upstream project: https://github.com/leejet/stable-diffusion.cpp
@@ -38,4 +38,17 @@ This index does not replace any upstream license texts. Model weights and native
    Windows binary release tag used by this source release: https://github.com/ggml-org/llama.cpp/releases/tag/b11744
    The project is MIT-licensed. The executable archive is downloaded on first setup, extracted after ZIP/CRC and path validation, and is not bundled in the source ZIP.
 
-Current v1.0.0-beta.1 Close-up uses the text encoder and matched vision projector selected in Model Catalog; this source kit does not separately download or redistribute another Qwen3-VL encoder for grounding.
+Current v1.0.0-beta.2 Close-up uses the text encoder and matched vision projector selected in Model Catalog; this source kit does not separately download or redistribute another Qwen3-VL encoder for grounding.
+
+
+9) Upscayl-NCNN Windows x64 runner (downloaded on demand for community NCNN super-resolution models)
+   Upstream: https://github.com/upscayl/upscayl-ncnn
+   Pinned Windows release: https://github.com/upscayl/upscayl-ncnn/releases/tag/20251207-174704
+   Source repository: https://github.com/upscayl/upscayl-ncnn
+   License: GNU Affero General Public License v3.0 (AGPL-3.0): https://github.com/upscayl/upscayl-ncnn/blob/master/LICENSE
+   The app verifies the downloaded Windows archive against a pinned SHA-256, expected size, ZIP CRC and executable presence before extracting it. The runner is downloaded after installation and is not bundled in the compact installer.
+
+10) Community NCNN model catalogue (downloaded model weights)
+    Catalogue: https://github.com/upscayl/custom-models
+    Pinned source tree: https://github.com/upscayl/custom-models/tree/4b6d2cfa59c7442af115dfc6e50fd8d7d40b96ef/models
+    The application downloads selected .param/.bin pairs only after selection and validates exact file sizes and Git blob SHA-1 values. Model authors, upstream implementations and model-specific terms vary; this notice does not claim a single license for all community weights. Review the upstream attribution and licensing terms before redistribution. The model files are not bundled with the application installer.

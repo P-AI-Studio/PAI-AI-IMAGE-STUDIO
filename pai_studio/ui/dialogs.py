@@ -113,7 +113,7 @@ class ModelDownloadDialog(QDialog):
         heading = QLabel("Models & Workflow Settings")
         heading.setStyleSheet("font-size: 17pt; font-weight: 800; color: #82c9f5; padding: 3px 0;")
         root.addWidget(heading)
-        intro = QLabel("Choose model files and adjust Upscaler, Ultimate and LoRA in their tabs.")
+        intro = QLabel("Choose Qwen model components, then configure the selected learned upscaler and tile refinement together in Ultimate. LoRA has its own tab.")
         intro.setWordWrap(True)
         root.addWidget(intro)
 
@@ -320,27 +320,31 @@ class ModelDownloadDialog(QDialog):
         ultimate_page = add_settings_tab("Ultimate")
         if ultimate_card is not None:
             ultimate_page.addWidget(ultimate_card)
+        if esrgan_card is not None:
+            # The selected learned upscaler is part of this one Ultimate pipeline,
+            # not a second independent section or a duplicate post-processing toggle.
+            ultimate_page.addWidget(esrgan_card)
         ultimate_note = QLabel(
-            "Ultimate is a two-stage ComfyUI Ultimate SD Upscale workflow for Qwen Image 2.1: "
-            "first it runs a global denoise/reconstruction pass on the image, then it splits the resulting image "
-            "into 4 overlapping quadrants (2×2 grid), denoises each quadrant, and seamlessly stitches them together."
+            "Ultimate combines three stages: Qwen reconstruction, the selected learned NCNN upscaler "
+            "(Real-ESRGAN / Real-ESRNet or a curated community model), then full-coverage Qwen tile refinement "
+            "with color matching and soft overlap blending. If coverage is below 50%, the grid adds rows/columns "
+            "so every output pixel is covered. The same selected model powers the optional standalone upscale action."
         )
         ultimate_note.setWordWrap(True)
         ultimate_note.setStyleSheet("color: #94a6bb; padding: 0 3px;")
         ultimate_page.addWidget(ultimate_note)
-        ultimate_page.addStretch(1)
 
-        upscale_page = add_settings_tab("AI Upscaler")
-        if esrgan_card is not None:
-            upscale_page.addWidget(esrgan_card)
-
-        # The engine's current model selector is the only Real-ESRGAN selector.
+        # Model, runtime setup, and Ultimate refinement controls are intentionally in
+        # this one tab. Model weights are fetched on first use and checksum-verified.
         self.upscaler_combo = app_parent.upscale_model_combo
-        upscaler_group = QGroupBox("Runtime")
+        upscaler_group = QGroupBox("Ultimate AI Upscaler Runtime")
         upscaler_layout = QVBoxLayout(upscaler_group)
         upscaler_layout.setContentsMargins(12, 12, 12, 12)
         upscaler_layout.setSpacing(8)
-        upscaler_intro = QLabel("Install or repair the local Vulkan runtime and NCNN model files.")
+        upscaler_intro = QLabel(
+            "Install or verify the selected model's local Vulkan runner and model weights. "
+            "The compact installer does not bundle these files; downloads are staged on first use."
+        )
         upscaler_intro.setWordWrap(True)
         upscaler_layout.addWidget(upscaler_intro)
         self.upscaler_detail = QLabel()
@@ -348,18 +352,19 @@ class ModelDownloadDialog(QDialog):
         self.upscaler_detail.setStyleSheet("color: #94a6bb; padding: 2px 0; font-size: 9pt;")
         upscaler_layout.addWidget(self.upscaler_detail)
         links = QLabel(
-            f'<a href="{REALESRGAN_NCNN_URL}">Official Windows runtime</a> · '
-            f'<a href="{REALESRGAN_NCNN_URLS[1]}">Mirror</a> · '
-            f'<a href="{REALESRGAN_MODEL_ZOO_URL}">Model references</a>'
+            f'<a href="{REALESRGAN_NCNN_URL}">Real-ESRGAN Windows runtime</a> · '
+            f'<a href="{REALESRGAN_NCNN_URLS[1]}">Runtime mirror</a> · '
+            f'<a href="{REALESRGAN_MODEL_ZOO_URL}">Official model references</a> · '
+            '<a href="https://github.com/upscayl/custom-models">Community NCNN model catalogue</a>'
         )
         links.setOpenExternalLinks(True)
         links.setWordWrap(True)
         upscaler_layout.addWidget(links)
         upscaler_buttons = QHBoxLayout()
-        self.btn_use_upscaler = QPushButton("Save selection")
+        self.btn_use_upscaler = QPushButton("Save selected model")
         self.btn_use_upscaler.clicked.connect(self.apply_upscaler_choice)
         upscaler_buttons.addWidget(self.btn_use_upscaler)
-        self.btn_download_upscaler = QPushButton("Install / repair runtime")
+        self.btn_download_upscaler = QPushButton("Install / verify selected model")
         self.btn_download_upscaler.clicked.connect(self.start_upscaler_download)
         upscaler_buttons.addWidget(self.btn_download_upscaler)
         upscaler_layout.addLayout(upscaler_buttons)
@@ -368,8 +373,8 @@ class ModelDownloadDialog(QDialog):
         upscaler_layout.addWidget(self.upscaler_status)
         self.upscaler_combo.currentIndexChanged.connect(self._refresh_upscaler_details)
         self._refresh_upscaler_details()
-        upscale_page.addWidget(upscaler_group)
-        upscale_page.addStretch(1)
+        ultimate_page.addWidget(upscaler_group)
+        ultimate_page.addStretch(1)
 
         lora_page = add_settings_tab("LoRA")
         lora_page.addWidget(self.lora_settings_group)
@@ -575,10 +580,11 @@ class ModelDownloadDialog(QDialog):
         upscaler_meta = REALESRGAN_CATALOG_BY_ID.get(upscaler_id, REALESRGAN_CATALOG[0])
         profile["upscaler"] = {
             "id": upscaler_meta["id"], "title": upscaler_meta["title"],
-            "runtime_url": REALESRGAN_NCNN_URL,
-            "runtime_urls": list(REALESRGAN_NCNN_URLS),
-            "model_zoo_url": REALESRGAN_MODEL_ZOO_URL,
-            "pytorch_reference_url": upscaler_meta["pytorch_weights_url"],
+            "backend": upscaler_meta.get("backend", "official"),
+            "runtime_url": REALESRGAN_NCNN_URL if upscaler_meta.get("backend", "official") == "official" else "https://github.com/upscayl/upscayl-ncnn/releases/tag/20251207-174704",
+            "runtime_urls": list(REALESRGAN_NCNN_URLS) if upscaler_meta.get("backend", "official") == "official" else ["https://github.com/upscayl/upscayl-ncnn/releases/tag/20251207-174704"],
+            "model_zoo_url": upscaler_meta.get("model_source_url", REALESRGAN_MODEL_ZOO_URL),
+            "pytorch_reference_url": upscaler_meta.get("pytorch_weights_url", upscaler_meta.get("model_source_url", "")),
         }
         return profile
 
@@ -677,6 +683,21 @@ class ModelDownloadDialog(QDialog):
         combo.setCurrentIndex(combo.count() - 1)
 
     def _upscaler_runtime_executable(self) -> Optional[Path]:
+        model_id = str(self.upscaler_combo.currentData() or "realesrgan-x4plus")
+        meta = REALESRGAN_CATALOG_BY_ID.get(model_id, {})
+        if meta.get("backend") == "upscayl":
+            runtime_root = DATA_ROOT / "runtime" / "upscayl-ncnn"
+            exe = next((path for path in runtime_root.rglob("upscayl-bin.exe") if path.is_file()), None) if runtime_root.is_dir() else None
+            if exe is None:
+                return None
+            model_dir = exe.parent / "models"
+            stem = str(meta.get("model_file", model_id))
+            files_ok = all(
+                (model_dir / f"{stem}.{suffix}").is_file()
+                and (model_dir / f"{stem}.{suffix}").stat().st_size == int(meta[f"{suffix}_size"])
+                for suffix in ("param", "bin")
+            )
+            return exe if files_ok else None
         runtime_root = DATA_ROOT / "runtime" / "realesrgan-ncnn-vulkan"
         if not runtime_root.is_dir():
             return None
@@ -692,12 +713,15 @@ class ModelDownloadDialog(QDialog):
         meta = REALESRGAN_CATALOG_BY_ID.get(model_id, REALESRGAN_CATALOG[0])
         self.upscaler_detail.setOpenExternalLinks(True)
         self.upscaler_detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        source_url = meta.get("model_source_url") or meta.get("pytorch_weights_url") or REALESRGAN_MODEL_ZOO_URL
+        source_label = "Community NCNN source" if meta.get("backend") == "upscayl" else "Upstream model source"
+        backend_label = "Upscayl-NCNN" if meta.get("backend") == "upscayl" else "Real-ESRGAN NCNN"
         self.upscaler_detail.setText(
-            f"{meta['description']} · NCNN model: <code>{meta['id']}</code> · "
-            f"<a href=\"{meta['pytorch_weights_url']}\">Model source</a>"
+            f"{meta['description']} · Backend: <b>{backend_label}</b> · NCNN model: <code>{meta['id']}</code> · "
+            f'<a href="{source_url}">{source_label}</a>'
         )
         installed = self._upscaler_runtime_executable()
-        self.upscaler_status.setText("Vulkan runtime ready" if installed else "Vulkan runtime not installed")
+        self.upscaler_status.setText("Selected model and Vulkan runtime ready" if installed else "Selected model/runtime will be downloaded and verified on demand")
 
     def apply_upscaler_choice(self):
         model_id = str(self.upscaler_combo.currentData() or "realesrgan-x4plus")
@@ -743,21 +767,22 @@ class ModelDownloadDialog(QDialog):
             return
         if hasattr(engine, "force_stop"):
             engine.force_stop.clear()
-        self.upscaler_status.setText("Installing Real-ESRGAN runtime…")
-        self.upscaler_worker = RealESRGANRuntimeWorker(engine, self)
+        model_id = str(self.upscaler_combo.currentData() or "realesrgan-x4plus")
+        self.upscaler_status.setText(f"Installing/verifying selected AI model · {model_id}…")
+        self.upscaler_worker = RealESRGANRuntimeWorker(engine, self, model_id)
         self.upscaler_worker.completed.connect(self._upscaler_download_completed)
         self.upscaler_worker.failed.connect(self._upscaler_download_failed)
         self.upscaler_worker.start()
         self._update_enabled()
 
     def _upscaler_download_completed(self, path: str):
-        self.upscaler_status.setText("Vulkan runtime installed and verified.")
+        self.upscaler_status.setText("Selected model and Vulkan runtime installed/verified.")
         self._refresh_upscaler_details()
         self._update_enabled()
 
     def _upscaler_download_failed(self, message: str):
         self.upscaler_status.setText("Runtime installation failed: " + message.split("\n", 1)[0])
-        QMessageBox.warning(self, "Real-ESRGAN download failed", message)
+        QMessageBox.warning(self, "AI upscaler setup failed", message)
         self._update_enabled()
 
     def _profile_has_verified_catalog_assets(self) -> tuple[bool, str]:

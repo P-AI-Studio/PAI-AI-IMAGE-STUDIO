@@ -35,7 +35,7 @@ VALID_MEMORY_MODES: tuple[str, ...] = ("auto", "full_gpu", "low_vram")
 VALID_PREVIEW_METHODS: tuple[str, ...] = ("proj", "tae", "vae", "none")
 
 APP_NAME = "P.AI AI IMAGE STUDIO"
-APP_VERSION = "1.0.0-beta.1"  # Semantic version; beta.1 is the first public beta
+APP_VERSION = "1.0.0-beta.2"  # Semantic version; beta.2 fixes release packaging and publishing safety
 DISPLAY_VERSION = "Version 1 Beta"
 SETTINGS_VERSION = 44
 MAX_INFERENCE_SIDE = 2048
@@ -142,9 +142,32 @@ REALESRGAN_NCNN_URLS = (
     "https://sourceforge.net/projects/real-esrgan.mirror/files/v0.2.5.0/"
     "realesrgan-ncnn-vulkan-20220424-windows.zip/download",
 )
+# The upstream Real-ESRGAN NCNN runner is retained for its original models.
+# Upscayl-NCNN supports custom NCNN .param/.bin models for the extended photo catalogue.
+UPSCAYL_NCNN_URL = (
+    "https://github.com/upscayl/upscayl-ncnn/releases/download/20251207-174704/"
+    "upscayl-bin-20251207-174704-windows.zip"
+)
+UPSCAYL_NCNN_SHA256 = "1f0f65c5d2ade866555e2ac467d35952c35a47080a4060fe56a1ab028f67258a"
+UPSCAYL_NCNN_ARCHIVE_SIZE = 2421760
+UPSCAYL_NCNN_MODEL_COMMIT = "4b6d2cfa59c7442af115dfc6e50fd8d7d40b96ef"
+UPSCAYL_NCNN_MODEL_BASE_URL = (
+    "https://raw.githubusercontent.com/upscayl/custom-models/"
+    + UPSCAYL_NCNN_MODEL_COMMIT + "/models/"
+)
+
 REALESRGAN_MODEL_NAMES = {
     "Photo · Real-ESRGAN x4plus (4× native)": "realesrgan-x4plus",
     "Photo · Real-ESRNet x4plus (4× conservative)": "realesrnet-x4plus",
+    "Photo · RealESRGAN General x4 v3 (fast / natural)": "RealESRGAN_General_x4_v3",
+    "Photo · RealESRGAN General WDN x4 v3 (noise-aware)": "RealESRGAN_General_WDN_x4_v3",
+    "Photo · NMKD Siax 200k (natural detail)": "4x_NMKD-Siax_200k",
+    "Photo · LSDIR+ C (natural detail)": "4xLSDIRplusC",
+    "Photo · Nomos8k SC (photographic detail)": "4xNomos8kSC",
+    "Photo · HFA2k (photographic restoration)": "4xHFA2k",
+    "Photo · LSDIR Compact C3 (lightweight)": "4xLSDIRCompactC3",
+    "Photo · UniScale Restore": "uniscale_restore",
+    "Photo · NMKD Superscale SP (optional / clean source only)": "4x_NMKD-Superscale-SP_178000_G",
     "Anime / illustration · Real-ESRGAN (4× native)": "realesrgan-x4plus-anime",
     "Anime / video · AnimeVideo-v3 (4× native)": "realesr-animevideov3",
     "Anime / video · AnimeVideo-v3 x3 (3× native)": "realesr-animevideov3-x3",
@@ -158,53 +181,131 @@ REALESRGAN_MODEL_NATIVE_SCALES: dict[str, int] = {
     "realesr-animevideov3-x4": 4,
     "realesr-animevideov3-x3": 3,
     "realesr-animevideov3-x2": 2,
+    "RealESRGAN_General_x4_v3": 4,
+    "RealESRGAN_General_WDN_x4_v3": 4,
+    "4x_NMKD-Siax_200k": 4,
+    "4xLSDIRplusC": 4,
+    "4xNomos8kSC": 4,
+    "4xHFA2k": 4,
+    "4xLSDIRCompactC3": 4,
+    "uniscale_restore": 4,
+    "4x_NMKD-Superscale-SP_178000_G": 4,
 }
 
 
 def realesrgan_native_scale(model_name: str) -> int:
-    """Return the intrinsic native upscale factor for the selected Real-ESRGAN NCNN model."""
-    key = str(model_name or "realesrgan-x4plus").strip().lower()
+    """Return the intrinsic native upscale factor for the selected NCNN model."""
+    key = str(model_name or "realesrgan-x4plus").strip()
     return int(REALESRGAN_MODEL_NATIVE_SCALES.get(key, 4))
 
 
 REALESRGAN_MODEL_ZOO_URL = "https://github.com/xinntao/Real-ESRGAN/blob/master/docs/model_zoo.md"
 REALESRGAN_HF_NCNN_BASE = "https://huggingface.co/edgetools/realesrgan/resolve/main/"
-REALESRGAN_CATALOG: list[dict[str, str]] = [
+REALESRGAN_CATALOG: list[dict[str, Any]] = [
     {
         "id": "realesrgan-x4plus",
         "title": "Real-ESRGAN x4plus · Photo / general images (4× native)",
         "description": "General photographic upscaler with stronger detail recovery; automatically runs at its native 4× model scale.",
         "pytorch_weights_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth",
+        "backend": "official",
     },
     {
         "id": "realesrnet-x4plus",
         "title": "Real-ESRNet x4plus · Conservative photo restoration (4× native)",
-        "description": "More conservative restoration variant; automatically runs at its native 4× model scale.",
+        "description": "A conservative restoration variant that prioritizes source fidelity over aggressive texture synthesis.",
         "pytorch_weights_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.1/RealESRNet_x4plus.pth",
+        "backend": "official",
     },
     {
         "id": "realesrgan-x4plus-anime",
         "title": "Real-ESRGAN x4plus anime · Anime / illustration (4× native)",
         "description": "Optimized for anime-style images and clean linework; automatically runs at its native 4× model scale.",
         "pytorch_weights_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth",
+        "backend": "official",
     },
     {
         "id": "realesr-animevideov3",
         "title": "AnimeVideo-v3 · Lightweight animation upscaler (4× native)",
         "description": "Lighter anime/video model; automatically runs at its native 4× model scale.",
         "pytorch_weights_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-animevideov3.pth",
+        "backend": "official",
     },
     {
         "id": "realesr-animevideov3-x3",
         "title": "AnimeVideo-v3 x3 · Lightweight animation upscaler (3× native)",
-        "description": "Lighter anime/video model; automatically runs at its native 3× model scale.",
+        "description": "Lighter animation model; automatically runs at its native 3× model scale.",
         "pytorch_weights_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-animevideov3.pth",
+        "backend": "official",
     },
     {
         "id": "realesr-animevideov3-x2",
         "title": "AnimeVideo-v3 x2 · Lightweight animation upscaler (2× native)",
-        "description": "Lighter anime/video model; automatically runs at its native 2× model scale.",
+        "description": "Lighter animation model; automatically runs at its native 2× model scale.",
         "pytorch_weights_url": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-animevideov3.pth",
+        "backend": "official",
+    },
+    {
+        "id": "RealESRGAN_General_x4_v3", "title": "RealESRGAN General x4 v3 · Natural photos / fast",
+        "description": "Small, fast general-image model for natural and photographic content.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "RealESRGAN_General_x4_v3", "param_size": 5019, "bin_size": 2435272,
+        "param_blob_sha1": "221234ab0dc2641a11038f3682669ded6ba9e6d6", "bin_blob_sha1": "e0a8b6ca061931284832a67cdd4112d94a7c98a0",
+    },
+    {
+        "id": "RealESRGAN_General_WDN_x4_v3", "title": "RealESRGAN General WDN x4 v3 · Noise-aware photo",
+        "description": "A compact general-photo variant tuned toward denoising, useful when the source has visible noise.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "RealESRGAN_General_WDN_x4_v3", "param_size": 5019, "bin_size": 2435272,
+        "param_blob_sha1": "221234ab0dc2641a11038f3682669ded6ba9e6d6", "bin_blob_sha1": "a763b5065f282918ddb1aaa035d4f8b6b69fc39b",
+    },
+    {
+        "id": "4x_NMKD-Siax_200k", "title": "NMKD Siax 200k · Natural / lightly compressed photos",
+        "description": "Community model recommended for clean or lightly compressed real-world images.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "4x_NMKD-Siax_200k", "param_size": 108037, "bin_size": 66793352,
+        "param_blob_sha1": "c6d62b67aee7d30d8c2a3cc4847727c1c6155d74", "bin_blob_sha1": "f7333bdf6e62c44e723113e2674908f391947baf",
+    },
+    {
+        "id": "4xLSDIRplusC", "title": "LSDIR+ C · High-quality natural-image detail",
+        "description": "Community 4× model for detailed natural images; compare against Real-ESRGAN on your source.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "4xLSDIRplusC", "param_size": 108039, "bin_size": 33424520,
+        "param_blob_sha1": "aafe22d603d714ff07f3b1b24f5f0149c9767911", "bin_blob_sha1": "0746b5f44d28c90cbf87e438c98f0cdd52ba975a",
+    },
+    {
+        "id": "4xNomos8kSC", "title": "Nomos8k SC · Photographic detail",
+        "description": "Community model aimed at detailed high-resolution natural images.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "4xNomos8kSC", "param_size": 108039, "bin_size": 33424520,
+        "param_blob_sha1": "aafe22d603d714ff07f3b1b24f5f0149c9767911", "bin_blob_sha1": "ce5cfda16b37a9808d956b748e52564f6e978fd5",
+    },
+    {
+        "id": "4xHFA2k", "title": "HFA2k · Photographic restoration",
+        "description": "Community restoration model for natural photo detail and texture.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "4xHFA2k", "param_size": 108039, "bin_size": 33424520,
+        "param_blob_sha1": "aafe22d603d714ff07f3b1b24f5f0149c9767911", "bin_blob_sha1": "80d7a5d56afaf06ddb2770c022d44c3677a4d37c",
+    },
+    {
+        "id": "4xLSDIRCompactC3", "title": "LSDIR Compact C3 · Lightweight natural-image model",
+        "description": "Compact SRVGG model that trades some capacity for smaller weights and quicker inference.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "4xLSDIRCompactC3", "param_size": 2767, "bin_size": 1247368,
+        "param_blob_sha1": "0c02905d51229cfe2c2e9f6562b01ce9dcc0713b", "bin_blob_sha1": "5e9ec6ebb7d1811ccd9286a253e2575ae73b643c",
+    },
+    {
+        "id": "uniscale_restore", "title": "UniScale Restore · Natural photo restoration",
+        "description": "Community model intended for general restoration; compare results on your source.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "uniscale_restore", "param_size": 108039, "bin_size": 33424520,
+        "param_blob_sha1": "aafe22d603d714ff07f3b1b24f5f0149c9767911", "bin_blob_sha1": "2977b7eebbbdc7557a3a58f372fbb79006a868f8",
+    },
+    {
+        "id": "4x_NMKD-Superscale-SP_178000_G", "title": "NMKD Superscale SP · Clean / artifact-free photo (optional)",
+        "description": "Best tested on clean, artifact-free images; can amplify source defects and is deliberately not the default.",
+        "model_source_url": "https://github.com/upscayl/custom-models/tree/main/models", "backend": "upscayl",
+        "model_file": "4x_NMKD-Superscale-SP_178000_G", "param_size": 108037, "bin_size": 66793352,
+        "param_blob_sha1": "c6d62b67aee7d30d8c2a3cc4847727c1c6155d74", "bin_blob_sha1": "a5019b73ffbaede2436e6c99c585f4dcdf2f69a7",
     },
 ]
 REALESRGAN_CATALOG_BY_ID = {item["id"]: item for item in REALESRGAN_CATALOG}
