@@ -4,6 +4,7 @@ All notable changes to **P.AI AI Image Studio** are documented in this file.
 
 ## [1.0.0-beta.2] — Version 1 Beta hotfix (2026-10-27)
 
+- **Compact installer:** Exclude the large native engine and CUDA companion runtime from the Windows installer; download and verify them on first model load instead. Model weights remain a separate, user-selected Model Catalog download.
 - **Installer build:** Replace the fragile `Get-FileHash` command dependency with direct .NET SHA-256 hashing for native runtime integrity checks.
 - **Release CI:** Run the Windows installer build directly under PowerShell and on pull requests, so packaging failures are caught before tagging a release.
 - **Version consistency:** Read the application version from `VERSION` and use it for the Inno Setup output filename.
