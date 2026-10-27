@@ -598,7 +598,7 @@ def test_qwen_output_size_is_separate_from_real_esrgan_and_saved():
     assert 'self.std_w.setSuffix(" px")' in source
     assert 'self.std_h.setSuffix(" px")' in source
     assert 'The output scale here runs first; if Ultimate is ON, its independent scale multiplies that result again.' in source
-    assert 'Run AI Upscale' in source
+    assert 'Run Selected Upscaler' in source
     assert 'AI Upscale · shared by all workflows' not in source
     assert '"upscale_custom_w"' not in source
     assert '"upscale_custom_h"' not in source
