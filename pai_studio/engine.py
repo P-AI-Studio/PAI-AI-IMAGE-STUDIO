@@ -1729,7 +1729,7 @@ class LocalEngine:
         """Calculate the Git object SHA-1 (blob header + bytes) used by the pinned model manifest."""
         size = path.stat().st_size
         digest = hashlib.sha1()
-        digest.update(f"blob {size}\\0".encode("ascii"))
+        digest.update(f"blob {size}\0.encode("ascii"))
         with path.open("rb") as stream:
             while True:
                 chunk = stream.read(1024 * 1024)
@@ -2517,10 +2517,12 @@ class LocalEngine:
             tile_w = min(width, tile_limit)
             tile_h = min(height, tile_limit)
         if detail_mode == "ultimate":
-            x_starts = [0, max(0, width - tile_w)] if width > 1 else [0]
-            y_starts = [0, max(0, height - tile_h)] if height > 1 else [0]
+            # Full-coverage starts: 50% coverage remains a 2×2 grid, while smaller
+            # coverage automatically adds rows/columns instead of leaving untreated gaps.
+            x_starts = self._tile_starts(width, tile_w)
+            y_starts = self._tile_starts(height, tile_h)
             refinement_passes = max(1, min(2, int(getattr(self, "_active_ultimate_refinement_passes", 1))))
-            tile_label = f"Ultimate Tile Refinement · Qwen 4-tile (2×2) overlapping grid · denoise {effective_tile_strength:.2f} · coverage {coverage:.0%} · passes {refinement_passes}"
+            tile_label = f"Ultimate Tile Refinement · full-coverage {len(x_starts)}×{len(y_starts)} Qwen grid · denoise {effective_tile_strength:.2f} · coverage {coverage:.0%} · passes {refinement_passes}"
         else:
             x_starts = self._tile_starts(width, tile_w)
             y_starts = self._tile_starts(height, tile_h)
@@ -2648,7 +2650,8 @@ class LocalEngine:
                              warn_diff: float, steps: int, detail_mode: str = "fast",
                              use_img2img: bool = True, strength: Optional[float] = None,
                              tile_strength: Optional[float] = None, detail_profile: str = "balanced",
-                             ultimate_scale: int = 2) -> Image.Image:
+                             ultimate_scale: int = 2,
+                             upscale_options: Optional[dict[str, Any]] = None) -> Image.Image:
         detail_mode_norm = str(detail_mode or "fast").strip().lower()
         stage_width, stage_height = int(width), int(height)
         requested_width = min(MAX_OUTPUT_SIDE, max(64, int(width)))
@@ -2672,8 +2675,8 @@ class LocalEngine:
                 self.log(
                     f"Enhance Ultimate · Pass 1 Qwen at {native_width}×{native_height} "
                     f"(1/{requested_ultimate_scale} of requested {requested_width}×{requested_height}); "
-                    f"then Lanczos {effective_ultimate_scale:g}× upscale to {requested_width}×{requested_height} "
-                    f"and run overlapping Qwen detail tiles."
+                    f"then selected learned AI upscaler ({str((upscale_options or {}).get('upscale_model', 'realesrgan-x4plus'))}) "
+                    f"to {requested_width}×{requested_height} and run overlapping Qwen detail tiles."
                 )
             else:
                 self.log(
@@ -2688,14 +2691,16 @@ class LocalEngine:
                 max_attempts, retry_diff, warn_diff, steps,
                 use_img2img=use_img2img, strength=strength,
             )
-            stage_result = base if base.size == (stage_width, stage_height) else base.resize((stage_width, stage_height), Image.Resampling.LANCZOS)
-            result = (stage_result if (requested_width, requested_height) == (stage_width, stage_height)
-                      else stage_result.resize((requested_width, requested_height), Image.Resampling.LANCZOS))
-            self._publish_live_preview(result, marker=("ultimate-stage-1-then-scale", stage_width, stage_height, requested_width, requested_height))
+            # Preserve the native Qwen reconstruction for the learned upscaler. Do not enlarge
+            # it with a fixed interpolation kernel before AI super-resolution.
+            result = self._upscale_image_with_selected_model(
+                base, upscale_options or {}, (requested_width, requested_height)
+            )
+            self._publish_live_preview(result, marker=("ultimate-stage-1-ai-upscale", native_width, native_height, requested_width, requested_height))
             self.log(
                 f"Ultimate two-stage upscale · Qwen stage-1 reconstruction at {native_width}×{native_height} → "
-                f"Enhance canvas {stage_width}×{stage_height} → Lanczos Ultimate scale {effective_ultimate_scale:g}× → "
-                f"{requested_width}×{requested_height} → overlapping-tile refinement. "
+                f"selected AI model {str((upscale_options or {}).get('upscale_model', 'realesrgan-x4plus'))} → "
+                f"{requested_width}×{requested_height} → overlapping Qwen detail refinement. "
                 f"Main strength={float(strength if strength is not None else ENHANCE_IMG2IMG_STRENGTH):.2f}."
             )
         else:
@@ -2707,7 +2712,7 @@ class LocalEngine:
         needs_standard_refinement = max(requested_width, requested_height) <= MAX_INFERENCE_SIDE and detail_mode_norm != "fast"
         if needs_highres_tiles or needs_standard_refinement:
             if detail_mode_norm == "ultimate":
-                self.log("Ultimate · running four full-coverage Qwen detail tiles on the Lanczos-upscaled canvas.")
+                self.log("Ultimate · running full-coverage Qwen detail tiles on the learned AI-upscaled canvas.")
             elif needs_standard_refinement:
                 self.log(
                     f"Qwen profile={profile_key} · second denoise/detail pass enabled at {requested_width}×{requested_height}; "
