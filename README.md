@@ -45,7 +45,7 @@
 - **Storage:** Sufficient free disk space under `data/` for native runtimes, model weights (GGUF / Safetensors), and generated outputs.
 
 ### Installing a Packaged Release
-A built Windows release bundles the frozen application and pinned native runtime binaries. Model weights remain separate and can be downloaded or linked through the in-app **Model Catalog**.
+A built Windows installer contains the frozen PAI application, branding assets, required Python libraries and license notices. To keep the installer small, it does **not** include the native `stable-diffusion.cpp` engine, its separate CUDA 12 companion runtime, or model weights. After installation, use **Model Catalog** to choose and download the required model components; the download UI shows progress and validates files. Then click **Load Selected Models**: when needed, the app downloads the pinned native engine (338 MB archive) and the separate CUDA runtime, verifies the engine's SHA-256 and archive contents, and extracts it under `data/`. A network connection is needed for setup; once all selected components are installed, inference runs locally and can work offline.
 
 ## Quick Start (Source Mode)
 
@@ -62,7 +62,7 @@ To compile a standalone Windows installer (`PAI-AI-Image-Studio-Setup-1.0.0-beta
 
 1. Install Python 3.11–3.13 x64 and [Inno Setup 6](https://jrsoftware.org/isdl.php).
 2. Run `Build_Windows_Installer.bat` from the repository root.
-3. The build pipeline runs bytecode compilation and the full automated test suite, stages the pinned native runtime, freezes the application via PyInstaller into `dist/`, and compiles `dist-installer/PAI-AI-Image-Studio-Setup-1.0.0-beta.2.exe`.
+3. The build pipeline runs bytecode compilation and the full automated test suite, freezes the application via PyInstaller into a clean `dist/` folder, and compiles `dist-installer/PAI-AI-Image-Studio-Setup-1.0.0-beta.2.exe`. The native engine, CUDA runtime and model weights are deliberately excluded and are downloaded after installation.
 
 You can also trigger `.github/workflows/windows-release.yml` automatically on GitHub by pushing the `v1.0.0-beta.2` tag.
 
