@@ -786,18 +786,23 @@ def test_product_branding_and_generate_edit_skin_are_present():
     assert '#define AppName "P.AI AI IMAGE STUDIO"' in installer
     assert 'AppVerName={#AppVerName}' in installer
 
-def test_pinned_cuda_runtime_is_required_and_bundled():
+
+def test_pinned_cuda_runtime_is_downloaded_after_install_not_bundled():
     source = read_source()
     release_script = (ROOT / "build_release.ps1").read_text(encoding="utf-8")
+    engine = (ROOT / "pai_studio" / "engine.py").read_text(encoding="utf-8")
+
     assert "def _ensure_cuda_runtime_payload" in source
     assert "cudart-sd-bin-win-cu12-x64.zip" in source
     assert "ggml-cuda.dll" in source
     for dll in ("cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll"):
         assert dll in source
-        assert dll in release_script
-    assert "Download-CudaRuntime" in release_script
-    assert "CPU-only runtime" in release_script
-
+        assert dll in engine
+    assert "Download-CudaRuntime" not in release_script
+    assert "Download-Verified" not in release_script
+    assert "sd-server.exe" not in release_script
+    assert "The native engine, CUDA companion runtime, and model weights are intentionally not bundled." in release_script
+    assert "Windows CUDA 12 dependencies were not found in this runtime." in engine
 
 def test_package_zip_layout_after_build_includes_no_generated_executable_claim():
     # This test deliberately checks project source artifacts only; a Windows EXE is built on Windows.
@@ -1267,14 +1272,20 @@ def test_real_esrgan_catalog_has_official_pytorch_references_and_runtime_mirror(
     assert 'All app-owned settings and default data' not in source or 'USER_DATA_ROOT = APP_DIR / "data"' in source
 
 
-def test_native_build_downloads_have_primary_and_mirror_sources_in_local_cache():
-    release_script = (ROOT / 'build_release.ps1').read_text(encoding='utf-8')
-    assert "$CacheRoot = Join-Path $ProjectRoot '.build-cache\\stable-diffusion-cpp-master-964-1d0a58a'" in release_script
-    assert 'sourceforge.net/projects/stable-diffusion-cpp.mirror/files/master-964-1d0a58a/' in release_script
-    assert 'Download-Verified @($BinaryUrl, $BinaryMirrorUrl) $BinaryZip $BinarySha' in release_script
-    assert 'Download-CudaRuntime @($CudaRuntimeUrl, $CudaRuntimeMirrorUrl) $CudaRuntimeZip' in release_script
-    assert '$script:CudaRuntimeSourceUrl' in release_script
 
+def test_native_build_leaves_runtime_download_to_installed_app():
+    release_script = (ROOT / "build_release.ps1").read_text(encoding="utf-8")
+    engine = (ROOT / "pai_studio" / "engine.py").read_text(encoding="utf-8")
+    assert "Download-Verified" not in release_script
+    assert "Download-CudaRuntime" not in release_script
+    assert "$BinaryExtract" not in release_script
+    assert "sd-server.exe" not in release_script
+
+    assert 'runtime_root = DATA_ROOT / "runtime" / runtime_tag' in engine
+    assert "cudart-sd-bin-win-cu12-x64.zip" in engine
+    assert "Downloading sd-master-1d0a58a-bin-win-cuda12-x64.zip" in engine
+    assert "sourceforge.net/projects/stable-diffusion-cpp.mirror/files/master-964-1d0a58a/" in engine
+    assert "runtime_sha256 = \"2f08572e143f0b15a764197ea937d219dd70f0cc7eefb30eb84c9dae6a7cba6d\"" in engine
 
 def test_download_helpers_retry_hf_mirror_without_relaxing_pinned_hashes():
     source = read_source()
@@ -1348,17 +1359,21 @@ def test_prompt_presets_are_replaced_and_jobs_read_the_correct_editor():
     assert 'prompt = self.std_prompt.toPlainText().strip()' in jobs
 
 
+
 def test_download_sources_use_official_urls_and_fallbacks_with_integrity_validation():
     source = read_source()
+    engine = (ROOT / "pai_studio" / "engine.py").read_text(encoding="utf-8")
+    release_script = (ROOT / "build_release.ps1").read_text(encoding="utf-8")
     assert "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/" in source and "realesrgan-ncnn-vulkan-20220424-windows.zip" in source
     assert "sourceforge.net/projects/real-esrgan.mirror/files/v0.2.5.0/" in source and "realesrgan-ncnn-vulkan-20220424-windows.zip/download" in source
-    assert 'https://github.com/leejet/stable-diffusion.cpp/releases/download/master-964-1d0a58a/sd-master-1d0a58a-bin-win-cuda12-x64.zip' in (ROOT / 'build_release.ps1').read_text(encoding='utf-8')
-    assert 'https://sourceforge.net/projects/stable-diffusion-cpp.mirror/files/master-964-1d0a58a/sd-master-1d0a58a-bin-win-cuda12-x64.zip/download' in (ROOT / 'build_release.ps1').read_text(encoding='utf-8')
-    assert 'def model_download_sources(meta: dict[str, Any])' in source
-    assert 'hf-mirror.com' in source
+    assert "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-964-1d0a58a/sd-master-1d0a58a-bin-win-cuda12-x64.zip" in engine
+    assert "https://sourceforge.net/projects/stable-diffusion-cpp.mirror/files/master-964-1d0a58a/sd-master-1d0a58a-bin-win-cuda12-x64.zip/download" in engine
+    assert "def model_download_sources(meta: dict[str, Any])" in source
+    assert "hf-mirror.com" in source
     assert 'zipfile.ZipFile(path, "r")' in source or "zipfile.ZipFile(path, 'r')" in source
-    assert 'SHA-256 verification failed for {key}' in source
-    assert 'REALESRGAN_MODEL_ZOO_URL' in source
+    assert "SHA-256 verification failed for {key}" in source
+    assert "REALESRGAN_MODEL_ZOO_URL" in source
+    assert "Download-Verified" not in release_script
 
 def test_qwen3vl_gguf_mmproj_is_allowed_in_vision_projector_slot():
     source = read_source()
