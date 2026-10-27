@@ -62,9 +62,10 @@ To compile a standalone Windows installer (`PAI-AI-Image-Studio-Setup-1.0.0-beta
 
 1. Install Python 3.11–3.13 x64 and [Inno Setup 6](https://jrsoftware.org/isdl.php).
 2. Run `Build_Windows_Installer.bat` from the repository root.
-3. The build pipeline runs bytecode compilation and the full automated test suite, freezes the application via PyInstaller into a clean `dist/` folder, and compiles `dist-installer/PAI-AI-Image-Studio-Setup-1.0.0-beta.2.exe`. The native engine, CUDA runtime and model weights are deliberately excluded and are downloaded after installation.
+3. The build pipeline runs bytecode compilation and the full automated test suite, freezes the application via PyInstaller into a clean `dist/` folder, and compiles the installer.
+4. The installer is saved in the repository's `dist-installer/` folder as `PAI-AI-Image-Studio-Setup-<VERSION>.exe` (for the current `VERSION`, `PAI-AI-Image-Studio-Setup-1.0.0-beta.2.exe`). Copy that EXE to your distribution folder, cloud storage, or a GitHub Release. The output folders are intentionally excluded from Git; **do not commit the compiled installer, models, or runtime files**.
 
-You can also trigger `.github/workflows/windows-release.yml` automatically on GitHub by pushing the `v1.0.0-beta.2` tag.
+The native engine, CUDA runtime and model weights are deliberately excluded and are downloaded after installation. For GitHub Actions release publishing, merge the intended source changes first, ensure `VERSION` has the new release version, and create a matching new tag (for example, `v1.0.0-beta.3`). Do not overwrite or force-update an existing tag.
 
 ## Running Automated Tests
 
