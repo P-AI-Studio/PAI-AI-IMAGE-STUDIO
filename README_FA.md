@@ -85,18 +85,21 @@ GitHub Actions مجموعهٔ تست سورس را روی Windows و Ubuntu، ب
 
 ## ساختار مخزن
 
+فقط سورس برنامه، فایل‌های برندینگ لازم، مستندات و مجوزها، تنظیمات ساخت و تست‌های خودکار در Git نگهداری می‌شوند. فایل نصب کامپایل‌شده، وزن مدل‌ها، Runtimeهای بومی، تصاویر خروجی و Cacheهای محلی به مخزن اضافه نمی‌شوند.
+
 ```text
-pai_ai_image_studio.py          نقطهٔ ورود برنامه
-pai_studio/                     ماژول‌ها و UI
-assets/                         آیکون و لوگوی P.AI
-licenses/                       اطلاعیه‌ها و ارجاع مجوزهای شخص ثالث
-tests/                          تست‌های واحد، اعتبارسنجی و رگرسیون
-.github/workflows/              CI و ساخت نصب‌کنندهٔ ویندوز
-Run_PAI_AI_IMAGE_STUDIO.bat     اجرای برنامه در حالت سورس
-Install_Update_Requirements.bat نصب وابستگی‌های حالت سورس
-Build_Windows_Installer.bat     ورودی ساخت نصب‌کنندهٔ ویندوز
-build_release.ps1               زنجیرهٔ بسته‌بندی Windows x64
-installer.iss                   تنظیمات نصب‌کنندهٔ Inno Setup
+README.md / README_FA.md          راهنمای پروژه و ساخت
+LICENSE / SECURITY.md             شرایط مخزن و گزارش امنیتی
+CHANGELOG.md / VERSION            تاریخچه تغییرات و منبع نسخه
+licenses/                         اطلاعیه‌های مجوز شخص ثالث
+pai_ai_image_studio.py            نقطهٔ ورود برنامه
+pai_studio/                       موتور، کاتالوگ، اعتبارسنجی و رابط برنامه
+assets/                           آیکون و برندینگ برنامه/نصب‌کننده
+requirements*.txt                 وابستگی‌های برنامه، ساخت و تست
+Build_Windows_Installer.bat       ساخت نصب‌کننده با یک اجرا
+build_release.ps1 / installer.iss بسته‌بندی PyInstaller و تنظیمات Inno Setup
+tests/                            تست‌های رگرسیون و اعتبارسنجی انتشار
+.github/workflows/                تست سورس و CI ساخت نصب‌کننده
 ```
 
 ## عیب‌یابی
