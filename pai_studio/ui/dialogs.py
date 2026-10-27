@@ -113,7 +113,7 @@ class ModelDownloadDialog(QDialog):
         heading = QLabel("Models & Workflow Settings")
         heading.setStyleSheet("font-size: 17pt; font-weight: 800; color: #82c9f5; padding: 3px 0;")
         root.addWidget(heading)
-        intro = QLabel("Choose model files and adjust Upscaler, Ultimate and LoRA in their tabs.")
+        intro = QLabel("Choose Qwen model components, then configure the selected learned upscaler and tile refinement together in Ultimate. LoRA has its own tab.")
         intro.setWordWrap(True)
         root.addWidget(intro)
 
