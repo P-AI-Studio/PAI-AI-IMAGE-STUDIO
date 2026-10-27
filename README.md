@@ -1,6 +1,6 @@
 # P.AI AI Image Studio
 
-**Version:** `1.0.0-beta.2` (Version 1 Beta) · **Platform:** Windows 10/11 x64 · **Inference Backend:** Native `stable-diffusion.cpp` (CUDA 12) + `realesrgan-ncnn-vulkan`
+**Version:** `1.0.0-beta.2` (Version 1 Beta) · **Platform:** Windows 10/11 x64 · **Inference Backend:** Native `stable-diffusion.cpp` (CUDA 12) + selectable Real-ESRGAN / Upscayl-NCNN upscalers
 
 **P.AI AI Image Studio** is a standalone, local-first Windows desktop studio for generative image creation, instruction-guided editing, generative restoration & upscaling, semantic target-guided close-up zoom, 1:1 outpainting, and neural super-resolution. The application owns its entire desktop UI, workflow engine, Model Catalog, diagnostic tools, interactive comparison canvas, and local `data/` workspace—with **zero dependency on external web UIs or ComfyUI servers**.
 
@@ -15,10 +15,12 @@
   3. **Enhance / Upscale:** Generative texture restoration with **Balanced**, **Strong**, and **Maximum** detail profiles.
   4. **Close-up / Smart Zoom:** Open-vocabulary semantic target localization powered by **Qwen3-VL 8B** (supporting both GGUF + `mmproj` and embedded-vision Safetensors such as `qwen3vl_8b_int8_convrot.safetensors`) alongside interactive manual focus selection.
   5. **Square 1:1 Outpaint:** Context-aware canvas extension with feathered seam blending.
-  6. **Real-ESRGAN / Real-ESRNet:** Standalone Vulkan neural super-resolution with strict output dimension verification.
-- **Two-Stage Lanczos + Ultimate Tile Refinement Pipeline:**
-  - **When Ultimate Tile Refinement is ON:** Pass 1 runs full-frame Qwen reconstruction at `requested_resolution ÷ ultimate_scale` (e.g., `512×512` for `1024×1024`, `1024×1024` for `2048×2048`, or `2048×2048` for `4096×4096`), scales the result by `ultimate_scale` (`2×`, `3×`, or `4×` from Model Catalog) using a high-precision **Lanczos** filter to reach the target resolution, and finishes with an overlapping $2\times2$ **Ultimate Tile Refinement** pass featuring 2D cosine feather blending and per-tile mean/std color matching.
-  - **When Ultimate Tile Refinement is OFF:** Runs directly at the requested resolution without Lanczos scaling or tile refinement.
+  6. **Ultimate AI Upscaler:** One unified Ultimate toggle for the selected Real-ESRGAN / Real-ESRNet or community NCNN model, with a standalone “Run Selected Upscaler” action available too.
+- **Unified Qwen + Learned Upscaler + Ultimate Tile Refinement:**
+  - With the single **Ultimate** toggle ON, Qwen makes the first reconstruction at `requested_resolution ÷ Ultimate output scale` (for example, 512px for a 1024px target at 2×). The selected learned NCNN model then performs the actual super-resolution to the target canvas; Ultimate no longer uses Lanczos as its primary upscaling stage.
+  - A final full-coverage grid of overlapping Qwen tiles restores local texture, followed by color matching and soft cosine edge blending. At 50% coverage the grid is 2×2; lower coverage automatically adds rows and columns rather than leaving untreated center strips.
+  - Choose an official Real-ESRGAN / Real-ESRNet model or a community photo model such as NMKD Siax, LSDIR+ C, Nomos8k SC, HFA2k, UniScale Restore, or RealESRGAN General v3 directly inside **Model Catalog → Ultimate**. Models and the selected Windows Vulkan runner are downloaded on demand and verified; they are not bundled in the compact installer.
+  - With Ultimate OFF, the existing workflow path runs without the Ultimate upscaler and tile-refinement stages.
 - **Fully Connected Model Catalog Tile Controls & Step Compensation:**
   - Every Ultimate tile refinement parameter in **Model Catalog** (`Steps per tile`, `Denoise strength`, `Tile coverage + overlap`, `Refinement passes`, and `Ultimate output scale`) is wired directly into the live execution engine across all workflows.
   - Automatic **Img2Img step schedule compensation** (`compensate_img2img_steps=True`) calculates $\lceil \text{desired\_steps} / \text{strength} \rceil$ so `stable-diffusion.cpp` executes the exact number of requested denoising steps per tile instead of truncating schedules at low denoise strengths.
@@ -29,12 +31,12 @@
 
 | Workflow | Primary Function | Ultimate Tile Refinement Support |
 |---|---|---|
-| **Image Generate** | Text-to-image synthesis from English or non-English prompts | Optional two-stage half-res Pass 1 $\rightarrow$ Lanczos $\rightarrow$ $2\times2$ tile refinement |
-| **Image Edit** | Instruction-guided scene, outfit, lighting, or object editing | Optional two-stage half-res Pass 1 $\rightarrow$ Lanczos $\rightarrow$ $2\times2$ tile refinement |
+| **Image Generate** | Text-to-image synthesis from English or non-English prompts | Optional Qwen reconstruction $\rightarrow$ selected learned upscaler $\rightarrow$ full-coverage Qwen tile refinement |
+| **Image Edit** | Instruction-guided scene, outfit, lighting, or object editing | Optional Qwen reconstruction $\rightarrow$ selected learned upscaler $\rightarrow$ full-coverage Qwen tile refinement |
 | **Enhance / Upscale** | Generative restoration and high-frequency detail recovery | Full two-stage pipeline with **Balanced**, **Strong**, and **Maximum** profiles |
-| **Close-up / Smart Zoom** | Semantic target crop (Qwen3-VL) or manual click focus + reconstruction | Full two-stage pipeline (`Pass 1` $\rightarrow$ `Lanczos` $\rightarrow$ `4-tile Ultimate stitch`) |
+| **Close-up / Smart Zoom** | Semantic target crop (Qwen3-VL) or manual click focus + reconstruction | Optional selected-model super-resolution followed by full-coverage Qwen tile refinement |
 | **Square 1:1** | Non-square aspect ratio extension to a seamless 1:1 square | Full two-stage pipeline with seam-aware compositing |
-| **Real-ESRGAN / ESRNet** | Fast standalone neural super-resolution (`2×`, `3×`, `4×`) | Uses dedicated NCNN Vulkan tile engine |
+| **Ultimate AI Upscaler** | Learned 2×/3×/4× photo super-resolution and detail refinement | One selector and one Ultimate toggle; official and community NCNN models supported |
 
 ## System Requirements
 
@@ -65,7 +67,7 @@ To compile a standalone Windows installer (`PAI-AI-Image-Studio-Setup-1.0.0-beta
 3. The build pipeline runs bytecode compilation and the full automated test suite, freezes the application via PyInstaller into a clean `dist/` folder, and compiles the installer.
 4. The installer is saved in the repository's `dist-installer/` folder as `PAI-AI-Image-Studio-Setup-<VERSION>.exe` (for the current `VERSION`, `PAI-AI-Image-Studio-Setup-1.0.0-beta.2.exe`). Copy that EXE to your distribution folder, cloud storage, or a GitHub Release. The output folders are intentionally excluded from Git; **do not commit the compiled installer, models, or runtime files**.
 
-The native engine, CUDA runtime and model weights are deliberately excluded and are downloaded after installation. For GitHub Actions release publishing, merge the intended source changes first, ensure `VERSION` has the new release version, and create a matching new tag (for example, `v1.0.0-beta.3`). Do not overwrite or force-update an existing tag.
+The native engine, CUDA runtime, selected upscaler runtime and model weights are deliberately excluded and are downloaded after installation. For GitHub Actions release publishing, merge the intended source changes first, ensure `VERSION` has the new release version, and create a matching new tag (for example, `v1.0.0-beta.3`). Do not overwrite or force-update an existing tag.
 
 ## Running Automated Tests
 
@@ -104,4 +106,4 @@ tests/                            Regression and release validation suite
 
 ## License & Third-Party Notices
 
-Refer to `LICENSE` for repository terms and `licenses/THIRD_PARTY_NOTICES.txt` for third-party runtimes (`stable-diffusion.cpp`, `realesrgan-ncnn-vulkan`), Python libraries, and model weight licenses.
+Refer to `LICENSE` for repository terms and `licenses/THIRD_PARTY_NOTICES.txt` for third-party runtimes (`stable-diffusion.cpp`, `realesrgan-ncnn-vulkan`, `upscayl-ncnn`), Python libraries, and model-weight sources and license notices.
