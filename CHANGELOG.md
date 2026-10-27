@@ -10,6 +10,9 @@ All notable changes to **P.AI AI Image Studio** are documented in this file.
 - **Version consistency:** Read the application version from `VERSION` and use it for the Inno Setup output filename.
 - **Safe publishing:** Remove force-push and force-tag behavior; refuse to overwrite an existing release tag and let GitHub Actions publish the installer.
 - **Release hygiene:** Remove a cached diagnostic log from the source ZIP and remove hard-coded automated-test totals from the documentation.
+- **Unified Ultimate AI upscaling:** Replace the separate Ultimate and automatic Real-ESRGAN switches with one Ultimate toggle and one model selector in Model Catalog → Ultimate. The selected model is used for learned super-resolution between the first Qwen reconstruction and the final Qwen tile-refinement stage; the old Lanczos-only enlargement is no longer the main upscale step.
+- **Community photo upscalers:** Add verified NCNN model choices including RealESRGAN General x4 v3 / WDN, NMKD Siax 200k, LSDIR+ C, Nomos8k SC, HFA2k, LSDIR Compact C3, UniScale Restore, and optional NMKD Superscale SP. Downloads remain outside the installer and use a pinned model manifest with file-size and Git blob hash validation.
+- **Ultimate tile coverage:** Use an adaptive full-coverage tile grid. At 50% coverage Ultimate uses a 2×2 grid; at lower coverage it adds rows/columns instead of leaving unrefined strips between tiles. Add tile-size options 200 and 600.
 
 ## [1.0.0-beta.1] — Version 1 Beta (2026-10-25)
 
