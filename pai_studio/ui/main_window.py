@@ -1937,7 +1937,7 @@ class App(QMainWindow):
             return False
         if self.model_worker and self.model_worker.isRunning():
             QMessageBox.information(self, "Model loading", "Wait for model loading to finish before downloading or repairing model files.")
-            return
+            return False
         target = Path(self.model_path_edit.text().strip() or str(MODEL_DIR)).expanduser()
         if not target.is_absolute():
             target = (APP_DIR / target).resolve()
