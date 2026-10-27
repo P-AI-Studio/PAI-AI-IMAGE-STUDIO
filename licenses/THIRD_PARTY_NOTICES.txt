@@ -1,4 +1,4 @@
-P.AI AI IMAGE STUDIO — Version 1 Beta — Third-party notices (v1.0.0-beta.1)
+P.AI AI IMAGE STUDIO — Version 1 Beta — Third-party notices (v1.0.0-beta.2)
 
 1) Native inference engine
    Upstream project: https://github.com/leejet/stable-diffusion.cpp
@@ -38,4 +38,4 @@ This index does not replace any upstream license texts. Model weights and native
    Windows binary release tag used by this source release: https://github.com/ggml-org/llama.cpp/releases/tag/b11744
    The project is MIT-licensed. The executable archive is downloaded on first setup, extracted after ZIP/CRC and path validation, and is not bundled in the source ZIP.
 
-Current v1.0.0-beta.1 Close-up uses the text encoder and matched vision projector selected in Model Catalog; this source kit does not separately download or redistribute another Qwen3-VL encoder for grounding.
+Current v1.0.0-beta.2 Close-up uses the text encoder and matched vision projector selected in Model Catalog; this source kit does not separately download or redistribute another Qwen3-VL encoder for grounding.
