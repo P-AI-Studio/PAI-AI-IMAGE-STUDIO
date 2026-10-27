@@ -38,6 +38,9 @@ except ImportError:  # Headless test fallback when PySide6 is not installed
 
 from .constants import (
     APP_VERSION,
+    REALESRGAN_CATALOG_BY_ID,
+    REALESRGAN_NCNN_URLS,
+    realesrgan_native_scale,
     _download_ssl_context,
     _human_gb,
     _sha256_file,
@@ -373,14 +376,24 @@ class RealESRGANRuntimeWorker(QThread):
     completed = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, engine: LocalEngine, parent=None):
+    def __init__(self, engine: LocalEngine, parent=None, model_name: str = "realesrgan-x4plus"):
         super().__init__(parent)
         self.engine = engine
+        self.model_name = str(model_name or "realesrgan-x4plus")
 
     def run(self):
         try:
-            path = self.engine._ensure_realesrgan_runtime()
-            self.completed.emit(str(path))
+            meta = REALESRGAN_CATALOG_BY_ID.get(self.model_name, {})
+            if meta.get("backend") == "upscayl":
+                executable = self.engine._ensure_upscayl_runtime()
+                model_dir = self.engine._ensure_upscayl_model_pair(executable, self.model_name)
+                self.completed.emit(str(model_dir))
+            else:
+                executable = self.engine._ensure_realesrgan_runtime()
+                scale = realesrgan_native_scale(self.model_name)
+                cli_name = "realesr-animevideov3" if self.model_name.startswith("realesr-animevideov3") else self.model_name
+                self.engine._ensure_realesrgan_model_pair(executable, cli_name, scale)
+                self.completed.emit(str(executable.parent / "models"))
         except Exception as exc:
             self.failed.emit(f"{exc}\n\n{traceback.format_exc()}")
 
