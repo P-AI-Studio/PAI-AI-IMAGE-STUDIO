@@ -960,7 +960,7 @@ class App(QMainWindow):
         qsl.addLayout(profile_row)
         self.qwen_strength_group.setToolTip(
             "Select a Qwen reconstruction profile. Prompt guidance and Img2Img strengths apply to new jobs. "
-            "Optional Real-ESRGAN post-processing is controlled by its workflow switch."
+            "Ultimate controls the selected learned upscaler and the final Qwen tile-refinement stage; choose the model in Model Catalog → Ultimate."
         )
         # Short per-button descriptions replace the old long prompt-guidance preview.
         self.qwen_profile_prompt_note = None  # Keep prompt guidance internal; do not display long prompt text.
@@ -970,7 +970,7 @@ class App(QMainWindow):
         edl = QVBoxLayout(self.enhance_detail_group)
         self.ultimate_qwen_upscale_check = QCheckBox("Enable tiled detail refinement")
         self.ultimate_qwen_upscale_check.setChecked(bool(self.settings.get("ultimate_qwen_upscale_enabled", False)))
-        self.ultimate_qwen_upscale_check.setToolTip("Ultimate runs an additional detail pass over an overlapping 2×2 tile grid, using the compatible eight-step Turbo schedule where applicable.")
+        self.ultimate_qwen_upscale_check.setToolTip("Ultimate runs the selected learned NCNN upscaler between Qwen reconstruction and adaptive full-coverage Qwen tile refinement. At 50% coverage the grid is 2×2; lower coverage adds rows/columns to avoid untreated gaps.")
         edl.addWidget(self.ultimate_qwen_upscale_check)
         ultimate_form = QFormLayout()
         self.ultimate_qwen_scale_combo = QComboBox()
@@ -1009,7 +1009,7 @@ class App(QMainWindow):
         self.ultimate_qwen_steps_spin.setToolTip("Directly controls the number of executed denoising steps per tile in Ultimate mode for both Qwen-Image 2.1 Turbo and non-Turbo checkpoints.")
         ultimate_form.addRow("Steps per tile", self.ultimate_qwen_steps_spin)
         edl.addLayout(ultimate_form)
-        detail_mode_note = QLabel("Ultimate is an optional, quality-focused detail stage. It processes overlapping image tiles sequentially and blends the overlaps to reduce visible boundaries.")
+        detail_mode_note = QLabel("Ultimate is an optional quality-focused pipeline: selected learned upscaler first, then sequential full-coverage Qwen tiles with soft-edge blending to reduce visible boundaries.")
         detail_mode_note.setWordWrap(True)
         detail_mode_note.setStyleSheet("color: #94a6bb; font-size: 9pt;")
         edl.addWidget(detail_mode_note)
