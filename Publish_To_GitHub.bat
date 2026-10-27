@@ -3,79 +3,113 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 echo ============================================================================
-echo   P.AI AI IMAGE STUDIO — Version 1 Beta (v1.0.0-beta.1) GitHub Sync ^& Upload
+echo   P.AI AI IMAGE STUDIO — Safe GitHub Sync and Release Trigger
 echo   Repository: https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO
 echo ============================================================================
-echo.
 
+echo.
 where git >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Git is not installed or not in PATH.
-    echo Please install Git from https://git-scm.com/ and run this script again.
+    echo Install Git from https://git-scm.com/ and try again.
     pause
     exit /b 1
 )
 
 if not exist ".git" (
-    echo [1/4] Initializing local Git repository on branch main...
-    git init -b main
-) else (
-    git branch -M main
+    echo [ERROR] This directory is not a Git clone.
+    echo Do not initialize an empty repository from the release ZIP.
+    echo First clone https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO.git,
+    echo copy your intended changes into that clone, then run this script there.
+    pause
+    exit /b 2
 )
 
-git config user.name >nul 2>nul
-if errorlevel 1 (
-    git config user.name "P-AI-Studio"
-)
-git config user.email >nul 2>nul
-if errorlevel 1 (
-    git config user.email "P-AI-Studio@users.noreply.github.com"
-)
-
-echo [2/4] Staging and committing all project files...
-git add -A
-git diff --cached --quiet
-if errorlevel 1 (
-    git commit -m "Release P.AI AI IMAGE STUDIO Version 1 Beta (v1.0.0-beta.1)"
+for /f "delims=" %%B in ('git branch --show-current') do set "BRANCH=%%B"
+if /I not "%BRANCH%"=="main" (
+    echo [ERROR] Current branch is "%BRANCH%", not main.
+    echo Switch to main and review or commit your changes before syncing.
+    pause
+    exit /b 3
 )
 
 git remote get-url origin >nul 2>nul
 if errorlevel 1 (
-    git remote add origin https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO.git
-) else (
-    git remote set-url origin https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO.git
-)
-
-echo [3/4] Pushing full source code and assets to GitHub (main branch)...
-git push -u origin main --force
-if errorlevel 1 (
-    echo.
-    echo [WARNING] Git push required authentication or encountered an error.
-    echo Please complete the GitHub sign-in window if prompted and run again.
+    echo [ERROR] Remote origin is missing. Add the expected GitHub repository first.
     pause
-    exit /b 1
+    exit /b 4
+)
+for /f "delims=" %%V in (VERSION) do set "VERSION=%%V"
+if not defined VERSION (
+    echo [ERROR] VERSION file is empty or missing.
+    pause
+    exit /b 5
+)
+set "TAG=v%VERSION%"
+
+echo [1/5] Staging current changes...
+git add -A
+git diff --cached --quiet
+if errorlevel 1 (
+    git commit -m "Release P.AI AI IMAGE STUDIO %VERSION%"
+    if errorlevel 1 (
+        echo [ERROR] Commit failed. Review Git output and try again.
+        pause
+        exit /b 6
+    )
+) else (
+    echo No new tracked changes to commit.
 )
 
-echo [4/4] Updating tag v1.0.0-beta.1 on GitHub...
-git tag -f v1.0.0-beta.1
-git push origin v1.0.0-beta.1 --force
+echo [2/5] Fetching origin and replaying local commits safely...
+git fetch origin
+if errorlevel 1 (
+    echo [ERROR] Could not fetch origin. No force push was attempted.
+    pause
+    exit /b 7
+)
+git pull --rebase origin main
+if errorlevel 1 (
+    echo [ERROR] Rebase could not finish. Resolve conflicts manually, then rerun this script.
+    pause
+    exit /b 8
+)
 
-where gh >nul 2>nul
+echo [3/5] Pushing main without force...
+git push -u origin main
+if errorlevel 1 (
+    echo [ERROR] Push was rejected. Review branch divergence and permissions; history was not overwritten.
+    pause
+    exit /b 9
+)
+
+echo [4/5] Checking release tag %TAG%...
+git ls-remote --exit-code --tags origin "refs/tags/%TAG%" >nul 2>nul
 if not errorlevel 1 (
-    echo [INFO] GitHub CLI detected — updating Pre-release v1.0.0-beta.1...
-    gh release view v1.0.0-beta.1 --repo P-AI-Studio/PAI-AI-IMAGE-STUDIO >nul 2>nul
-    if errorlevel 1 (
-        gh release create v1.0.0-beta.1 --repo P-AI-Studio/PAI-AI-IMAGE-STUDIO --title "P.AI AI IMAGE STUDIO — Version 1 Beta (v1.0.0-beta.1)" --notes-file "RELEASE_NOTES.md" --prerelease --target main
-    ) else (
-        gh release edit v1.0.0-beta.1 --repo P-AI-Studio/PAI-AI-IMAGE-STUDIO --title "P.AI AI IMAGE STUDIO — Version 1 Beta (v1.0.0-beta.1)" --notes-file "RELEASE_NOTES.md" --prerelease
-    )
+    echo [ERROR] Tag %TAG% already exists on GitHub and will not be overwritten.
+    echo To publish a new build, update VERSION to a new beta version and commit that change.
+    echo The Windows release workflow publishes the installer when a new version tag is pushed.
+    pause
+    exit /b 10
+)
+git tag -a "%TAG%" -m "P.AI AI IMAGE STUDIO %VERSION%"
+if errorlevel 1 (
+    echo [ERROR] Could not create tag %TAG%. The existing tags were not changed.
+    pause
+    exit /b 11
+)
+
+echo [5/5] Pushing new tag %TAG% to start the Windows installer workflow...
+git push origin "%TAG%"
+if errorlevel 1 (
+    echo [ERROR] Tag push failed. The tag was not force-pushed.
+    pause
+    exit /b 12
 )
 
 echo.
-echo ============================================================================
-echo   SUCCESS! All code, tests, scripts, and assets are pushed to:
-echo   https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO
-echo   https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO/releases/tag/v1.0.0-beta.1
-echo ============================================================================
-start "" "https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO"
+echo Sync completed. GitHub Actions will build and attach the Windows installer if the workflow succeeds:
+echo https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO/actions
+start "" "https://github.com/P-AI-Studio/PAI-AI-IMAGE-STUDIO/actions"
 pause
+endlocal
