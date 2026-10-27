@@ -3,12 +3,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_release_builder_hashes_with_dotnet_and_not_get_file_hash():
+def test_release_builder_keeps_large_native_runtime_out_of_installer():
     script = (ROOT / "build_release.ps1").read_text(encoding="utf-8")
-    assert "function Get-Sha256Hex([string]$Path)" in script
-    assert "[System.Security.Cryptography.SHA256]::Create()" in script
-    assert "Get-Sha256Hex $Path" in script
-    assert "Get-FileHash" not in script
+    engine = (ROOT / "pai_studio" / "engine.py").read_text(encoding="utf-8")
+
+    # The build machine must not download or stage the hundreds-of-MB native
+    # runtime. A clean dist directory is the only input to Inno Setup.
+    assert "Download-Verified" not in script
+    assert "Download-CudaRuntime" not in script
+    assert "$BinaryExtract" not in script
+    assert "sd-server.exe" not in script
+    assert "Copy-Item -Path (Join-Path $BinaryExtract '*')" not in script
+    assert "if (Test-Path -LiteralPath $RuntimeDir)" in script
+
+    # The installed app still performs the pinned download, size/hash checks,
+    # safe extraction and install-time progress reporting.
+    assert 'runtime_sha256 = "2f08572e143f0b15a764197ea937d219dd70f0cc7eefb30eb84c9dae6a7cba6d"' in engine
+    assert "runtime_size = 338_016_915" in engine
+    assert "actual != runtime_sha256" in engine
+    assert 'DATA_ROOT / "runtime" / runtime_tag' in engine
+    assert "Downloading sd-master-1d0a58a-bin-win-cuda12-x64.zip" in engine
 
 
 def test_windows_release_workflow_builds_directly_and_runs_on_pull_requests():
