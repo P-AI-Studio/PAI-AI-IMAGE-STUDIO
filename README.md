@@ -85,7 +85,6 @@ assets/                           Icons and branding used by the app/installer
 requirements.txt / requirements-build.txt Runtime and build dependencies
 Build_Windows_Installer.bat       One-click local installer build
 build_release.ps1 / installer.iss PyInstaller build and Inno Setup configuration
-.github/workflows/                Windows installer and release-package publishing
 ```
 
 ## Privacy & Security Architecture

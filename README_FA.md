@@ -87,7 +87,6 @@ assets/                           آیکون و برندینگ برنامه/نص
 requirements.txt / requirements-build.txt وابستگی‌های برنامه و ساخت
 Build_Windows_Installer.bat       ساخت نصب‌کننده با یک اجرا
 build_release.ps1 / installer.iss بسته‌بندی PyInstaller و تنظیمات Inno Setup
-.github/workflows/                انتشار نصب‌کننده و پکیج سورس
 ```
 
 ## عیب‌یابی
