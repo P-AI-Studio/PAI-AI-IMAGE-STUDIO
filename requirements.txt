@@ -1,6 +1,6 @@
 # Python source-mode runtime dependencies. Native Qwen/NCNN inference uses bundled native engines.
 PySide6>=6.8,<7
-Pillow>=10.0,<12
+Pillow>=13.0.0,<14
 certifi>=2024.8.30
 numpy>=1.26,<3
 psutil>=5.9,<8
