@@ -691,7 +691,6 @@ def test_release_metadata_and_setup_files_exist():
     assert (ROOT / "build_release.ps1").is_file()
     assert (ROOT / "installer.iss").is_file()
     assert (ROOT / "requirements-build.txt").is_file()
-    assert (ROOT / "build_release.bat").is_file()
     assert (ROOT / "Install_Update_Requirements.bat").is_file()
     assert (ROOT / "requirements.txt").is_file()
     assert (ROOT / "licenses" / "THIRD_PARTY_NOTICES.txt").is_file()
@@ -807,7 +806,7 @@ def test_pinned_cuda_runtime_is_downloaded_after_install_not_bundled():
 def test_package_zip_layout_after_build_includes_no_generated_executable_claim():
     # This test deliberately checks project source artifacts only; a Windows EXE is built on Windows.
     assert (ROOT / "assets" / "pai_logo.png").is_file()
-    assert (ROOT / "build_release.bat").is_file()
+    assert (ROOT / "Build_Windows_Installer.bat").is_file()
 
 
 # Regression tests for fixes requested in Pasted text(2).txt.
