@@ -1819,7 +1819,7 @@ class LocalEngine:
             shutil.rmtree(temp_root, ignore_errors=True)
 
     def _run_upscale_file(self, input_path: Path, options: dict[str, Any], output_dir: Optional[Path] = None) -> Path:
-        """Run Real-ESRGAN/Real-ESRNet locally through Vulkan at the selected model's native scale."""
+        """Run the selected learned NCNN photo upscaler locally through Vulkan."""
         input_path = input_path.expanduser().resolve()
         if not input_path.is_file():
             raise FileNotFoundError(f"Upscaler input file was not found: {input_path}")
@@ -1827,21 +1827,28 @@ class LocalEngine:
         allowed_models = set(REALESRGAN_MODEL_NAMES.values()) | set(REALESRGAN_MODEL_NATIVE_SCALES.keys())
         if model_name not in allowed_models:
             raise ValueError(f"Unknown upscaler model: {model_name}")
-        # Always run each Real-ESRGAN model at its own intrinsic native scale (4x for x4plus/x4plus-anime,
-        # or 2x/3x/4x for the corresponding AnimeVideo-v3 model variant). No manual scale override is used.
         scale = realesrgan_native_scale(model_name)
-        cli_model_name = "realesr-animevideov3" if model_name.startswith("realesr-animevideov3") else model_name
         tile = max(0, min(1024, int(options.get("upscale_tile", 0))))
-        if tile not in (0, 128, 256, 384, 512, 768, 1024):
+        if tile not in (0, 128, 200, 256, 384, 512, 600, 768, 1024):
             tile = 256
+
+        model_meta = REALESRGAN_CATALOG_BY_ID.get(model_name, {})
+        backend = str(model_meta.get("backend", "official"))
+        if backend == "upscayl":
+            exe = self._ensure_upscayl_runtime()
+            model_dir = self._ensure_upscayl_model_pair(exe, model_name)
+            cli_model_name = str(model_meta.get("model_file", model_name))
+        else:
+            exe = self._ensure_realesrgan_runtime()
+            cli_model_name = "realesr-animevideov3" if model_name.startswith("realesr-animevideov3") else model_name
+            self._ensure_realesrgan_model_pair(exe, cli_model_name, scale)
+            model_dir = exe.parent / "models"
 
         target_dir = output_dir or input_path.parent
         target_dir.mkdir(parents=True, exist_ok=True)
         stamp = f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:4]}"
         target = target_dir / f"{input_path.stem}_AI{scale}x_{stamp}.png"
 
-        exe = self._ensure_realesrgan_runtime()
-        self._ensure_realesrgan_model_pair(exe, cli_model_name, scale)
         temp_input: Optional[Path] = None
         input_for_engine = input_path
         if input_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
@@ -1852,21 +1859,35 @@ class LocalEngine:
                 ImageOps.exif_transpose(image).convert("RGB").save(temp_input, format="PNG")
             input_for_engine = temp_input
 
-        log_path = CACHE_DIR / "engine" / "realesrgan.log"
+        log_name = "upscayl-ncnn.log" if backend == "upscayl" else "realesrgan.log"
+        log_path = CACHE_DIR / "engine" / log_name
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        args = [str(exe), "-i", str(input_for_engine), "-o", str(target), "-n", cli_model_name,
-                "-s", str(scale), "-t", str(tile), "-j", "1:2:2"]
+        if backend == "upscayl":
+            args = [
+                str(exe), "-i", str(input_for_engine), "-o", str(target),
+                "-m", str(model_dir), "-n", cli_model_name,
+                "-z", str(scale), "-s", str(scale), "-t", str(tile), "-j", "1:2:2",
+            ]
+        else:
+            args = [
+                str(exe), "-i", str(input_for_engine), "-o", str(target),
+                "-n", cli_model_name, "-s", str(scale), "-t", str(tile), "-j", "1:2:2",
+            ]
         if bool(options.get("upscale_tta", False)):
             args.append("-x")
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
         env = os.environ.copy()
-        self.status_callback(f"AI Upscale · {model_name} · native {scale}× · Vulkan GPU running…")
-        self.log(f"Running AI upscaler: {model_name} (CLI model={cli_model_name}), native scale={scale}x, tile={tile} (Vulkan auto-device).")
+        self.status_callback(f"Ultimate · {model_name} · native {scale}× · Vulkan GPU running…")
+        self.log(
+            f"Running selected AI upscaler: {model_name} · backend={backend} · native scale={scale}× · "
+            f"tile={tile} · Vulkan."
+        )
         try:
             with log_path.open("wb") as log_handle:
-                proc = subprocess.Popen(args, cwd=str(exe.parent), stdout=log_handle,
-                                        stderr=subprocess.STDOUT, env=env,
-                                        creationflags=creationflags, close_fds=(os.name != "nt"))
+                proc = subprocess.Popen(
+                    args, cwd=str(exe.parent), stdout=log_handle, stderr=subprocess.STDOUT,
+                    env=env, creationflags=creationflags, close_fds=(os.name != "nt"),
+                )
                 while proc.poll() is None:
                     if self.force_stop.wait(0.35):
                         proc.terminate()
@@ -1880,8 +1901,8 @@ class LocalEngine:
             if return_code != 0 or not target.is_file() or target.stat().st_size < 1024:
                 details = self._tail_file(log_path, 5000)
                 raise RuntimeError(
-                    f"Real-ESRGAN could not process the image (exit code {return_code}). "
-                    "Check the graphics driver / Vulkan support.\n\n" + details
+                    f"The selected AI upscaler could not process the image (exit code {return_code}). "
+                    "Check the graphics driver / Vulkan support and the selected model files.\n\n" + details
                 )
             with Image.open(target) as check_img:
                 check_img.verify()
@@ -1892,12 +1913,12 @@ class LocalEngine:
             expected_w, expected_h = source_w * scale, source_h * scale
             if (result_w, result_h) != (expected_w, expected_h):
                 raise RuntimeError(
-                    f"Real-ESRGAN returned unexpected dimensions {result_w}×{result_h}; expected "
-                    f"{expected_w}×{expected_h}. This can indicate an incompatible or mismatched NCNN model pair. "
-                    f"See the Real-ESRGAN log at {log_path}."
+                    f"AI upscaler returned unexpected dimensions {result_w}×{result_h}; expected "
+                    f"{expected_w}×{expected_h}. The selected model's native scale or model files may be incompatible. "
+                    f"See {log_path}."
                 )
             label = f"{scale}× native ({result_w}×{result_h})"
-            self.status_callback(f"AI Upscale complete · {label} · {target.name}")
+            self.status_callback(f"Ultimate · selected AI model complete · {label} · {target.name}")
             self.log(f"AI upscale saved: {target} ({self._human_size(target.stat().st_size)}).")
             return target
         finally:
