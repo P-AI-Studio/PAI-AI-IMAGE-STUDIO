@@ -62,7 +62,7 @@ def test_direct_function_calls_across_modules(tmp_path):
     from pai_studio.prompts import build_edit_prompt, calculate_qwen_output_size
     from pai_studio.workspace import app_directory, inspect_lora_file
 
-    assert APP_VERSION == "1.0.0-beta.1"
+    assert APP_VERSION == "1.0.0-beta.2"
     assert app_directory() == ROOT
     assert calculate_qwen_output_size((1000, 500), "enhance", "Scale", 2, 1024, 1024) == (2000, 1000)
     assert "Preserve the main subject" in build_edit_prompt("change jacket color", lock_identity=True)
