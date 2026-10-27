@@ -256,8 +256,8 @@ def test_ultimate_scale_is_applied_after_enhance_scale_and_one_x_still_refines_t
 
     one_x, one_global, one_tiles, one_logs = run(1)
     two_x, two_global, two_tiles, two_logs = run(2)
-    # When Ultimate is ON with scale 2x on target (160, 240), Pass 1 runs at half-res (96, 128) rounded to 32px,
-    # then Lanczos upscales by 2x to (160, 240), and Ultimate tiles refine (160, 240).
+    # With Ultimate scale 2x on target (160, 240), Pass 1 runs at the reduced Qwen size,
+    # the selected learned model fits the output canvas, and Qwen detail tiles refine that canvas.
     assert one_global == [(160, 256)] and two_global == [(64, 128)]
     assert one_x.size == (160, 240) and one_tiles == [(160, 240)]
     assert two_x.size == (160, 240) and two_tiles == [(160, 240)]
