@@ -68,7 +68,7 @@ To compile a standalone Windows installer (`PAI-AI-Image-Studio-Setup-1.0.0-beta
 3. The build pipeline installs the build toolchain, checks Python source syntax, freezes the application via PyInstaller into a clean `dist/` folder, and compiles the installer.
 4. The installer is saved in the repository's `dist-installer/` folder as `PAI-AI-Image-Studio-Setup-<VERSION>.exe` (for the current `VERSION`, `PAI-AI-Image-Studio-Setup-1.0.0-beta.2.exe`). Copy that EXE to your distribution folder, cloud storage, or a GitHub Release. The output folders are intentionally excluded from Git; **do not commit the compiled installer, models, or runtime files**.
 
-The native engine, CUDA runtime, selected upscaler runtime and model weights are deliberately excluded and are downloaded after installation. For GitHub Actions release publishing, merge the intended source changes first, ensure `VERSION` has the new release version, and create a matching new tag (for example, `v1.0.0-beta.3`). Do not overwrite or force-update an existing tag.
+The native engine, CUDA runtime, selected upscaler runtime and model weights are deliberately excluded and are downloaded after installation. To prepare a new distribution, update `VERSION`, build the Windows installer on Windows x64 using the steps above, and upload the installer plus a curated source ZIP and SHA-256 manifest to a GitHub Release. Never overwrite or force-update an existing release tag.
 
 ## Repository Structure
 
