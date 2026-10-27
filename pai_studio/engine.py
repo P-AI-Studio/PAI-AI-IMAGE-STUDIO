@@ -1729,7 +1729,7 @@ class LocalEngine:
         """Calculate the Git object SHA-1 (blob header + bytes) used by the pinned model manifest."""
         size = path.stat().st_size
         digest = hashlib.sha1()
-        digest.update(f"blob {size}\0.encode("ascii"))
+        digest.update(("blob %d\\0" % size).encode("ascii"))
         with path.open("rb") as stream:
             while True:
                 chunk = stream.read(1024 * 1024)
