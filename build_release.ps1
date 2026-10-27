@@ -61,15 +61,14 @@ try {
     if (Test-Path -LiteralPath $RuntimeDir) {
         throw 'The native engine runtime must not be staged inside dist. The installed app downloads and validates it on first model load.'
     }
+    # Keep the installed directory lean: include only app/runtime dependencies, branding,
+    # and required license notices. README/changelog/version metadata stay in the repository.
     Copy-Item (Join-Path $ProjectRoot 'licenses\THIRD_PARTY_NOTICES.txt') -Destination $DistDir -Force
     Copy-Item (Join-Path $ProjectRoot 'LICENSE') -Destination $DistDir -Force
-    Copy-Item (Join-Path $ProjectRoot 'VERSION') -Destination $DistDir -Force
-    Copy-Item (Join-Path $ProjectRoot 'CHANGELOG.md') -Destination $DistDir -Force
-    Copy-Item (Join-Path $ProjectRoot 'README.md') -Destination $DistDir -Force
-    Copy-Item (Join-Path $ProjectRoot 'README_FA.md') -Destination $DistDir -Force
 
     Write-Host "Compact application staged: $DistDir"
     Write-Host 'The native engine, CUDA companion runtime, and model weights are intentionally not bundled.'
+    Write-Host 'Only application files, branding assets, and license notices are copied to the install package.'
     Write-Host 'The installed app downloads and validates the native runtime on first model load; model weights stay managed by Model Catalog.'
 
     $ISCC = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue
