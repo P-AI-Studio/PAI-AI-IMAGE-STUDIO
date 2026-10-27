@@ -369,14 +369,12 @@ def test_resolve_closeup_grounding_gguf_pair_ignores_diffusion_gguf_and_persian_
     assert 0.52 <= (groin_fa.bbox_xyxy[1] + groin_fa.bbox_xyxy[3]) * 0.5 <= 0.78
 
 
-def test_ultimate_half_res_lanczos_pipeline_when_on_and_disabled_when_off(tmp_path: Path):
+def test_ultimate_half_res_selected_model_pipeline_when_on_and_disabled_when_off(tmp_path: Path):
     """Verify:
-    1) When Ultimate is ON with scale 2x:
-       - 1024 -> Pass 1 at 512x512 -> Lanczos 2x to 1024x1024 -> 4 Ultimate tiles
-       - 2048 -> Pass 1 at 1024x1024 -> Lanczos 2x to 2048x2048 -> 4 Ultimate tiles
-       - 4096 -> Pass 1 at 2048x2048 -> Lanczos 2x to 4096x4096 -> 4 Ultimate tiles
-    2) When Ultimate is OFF (even with ultimate_qwen_scale=2 in custom):
-       - Runs directly at requested resolution without half-res, Lanczos, or Ultimate tiles.
+    1) With Ultimate ON, Qwen makes the half-resolution first pass, the selected learned
+       upscaler produces the output canvas, and the final Qwen detail-refinement tiles run.
+    2) With Ultimate OFF, the workflow runs directly at requested resolution without the
+       selected learned upscaler or Ultimate tile refinement.
     """
     from pai_studio.engine import Job, qwen_turbo_tile_sampling_params
 
@@ -466,7 +464,7 @@ def test_ultimate_half_res_lanczos_pipeline_when_on_and_disabled_when_off(tmp_pa
             assert tile_call[1] == 10
             assert abs(tile_call[2] - 0.25) < 1e-6
 
-    # 2. Ultimate OFF: 1024 runs directly at 1024 with NO tiles and NO Lanczos half-res
+    # 2. Ultimate OFF: 1024 runs directly at 1024 with no learned upscaler or tile refinement
     eng_off = LocalEngine()
     eng_off.model_path = str(tmp_path)
     eng_off._find_model_parts = lambda _f: {"diffusion": tmp_path / "d.safetensors", "vae": tmp_path / "v.safetensors", "llm": convrot_te, "llm_vision": None}
