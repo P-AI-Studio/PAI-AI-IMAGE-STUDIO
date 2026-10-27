@@ -25,6 +25,23 @@ def test_release_builder_keeps_large_native_runtime_out_of_installer():
     assert "Downloading sd-master-1d0a58a-bin-win-cuda12-x64.zip" in engine
 
 
+
+def test_missing_models_open_model_catalog_before_native_runtime_download():
+    window = (ROOT / "pai_studio" / "ui" / "main_window.py").read_text(encoding="utf-8")
+    engine = (ROOT / "pai_studio" / "engine.py").read_text(encoding="utf-8")
+    method_start = window.index("    def load_model_async(self):")
+    method_end = window.index("    def _model_loaded(self", method_start)
+    load_method = window[method_start:method_end]
+    ensure_start = engine.index("    def ensure_loaded(self):")
+    ensure_end = engine.index("    @staticmethod", ensure_start)
+    ensure_method = engine[ensure_start:ensure_end]
+
+    assert load_method.index("catalog._profile_has_verified_catalog_assets()") < load_method.index("self._configure_engine_from_ui()")
+    assert "self.download_model_bundle()" in load_method
+    assert "The native engine download will start only after the required model files are ready." in load_method
+    assert ensure_method.index("parts = self._find_model_parts(model_dir)") < ensure_method.index("executable = self._runtime_executable()")
+
+
 def test_windows_release_workflow_builds_directly_and_runs_on_pull_requests():
     workflow = (ROOT / ".github/workflows/windows-release.yml").read_text(encoding="utf-8")
     assert "pull_request:" in workflow
