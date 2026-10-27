@@ -1,6 +1,8 @@
 #define AppName "P.AI AI IMAGE STUDIO"
+#ifndef AppVersion
+#define AppVersion "1.0.0-beta.2"
+#endif
 #define AppVerName "P.AI AI IMAGE STUDIO Version 1 Beta"
-#define AppVersion "1.0.0-beta.1"
 #define AppExeName "PAI-AI-Image-Studio.exe"
 #define SourceDir AddBackslash(SourcePath) + "dist\PAI-AI-Image-Studio"
 
@@ -17,7 +19,7 @@ PrivilegesRequired=lowest
 ArchitecturesInstallIn64BitMode=x64
 DisableProgramGroupPage=yes
 OutputDir=dist-installer
-OutputBaseFilename=PAI-AI-Image-Studio-Setup-1.0.0-beta.1
+OutputBaseFilename=PAI-AI-Image-Studio-Setup-{#AppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
