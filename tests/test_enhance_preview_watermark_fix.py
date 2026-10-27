@@ -25,6 +25,9 @@ def test_ultimate_runs_global_reconstruction_then_the_four_tile_refiner():
 
     engine._enhance_with_retries = fake_global  # type: ignore[method-assign]
     engine._qwen_detail_refine_large_output = fake_tile_refiner  # type: ignore[method-assign]
+    engine._upscale_image_with_selected_model = (
+        lambda image, options, target_size: image.resize(target_size, Image.Resampling.BICUBIC)
+    )
 
     result = engine._enhance_qwen_output(
         original,
@@ -46,7 +49,7 @@ def test_ultimate_runs_global_reconstruction_then_the_four_tile_refiner():
     assert result.size == (160, 240)
     assert global_calls and global_calls[0][2] == 0.84
     assert calls == [("ultimate", 0.25)]
-    assert any("Ultimate two-stage upscale" in line and "Ultimate scale 2×" in line for line in logs)
+    assert any("Ultimate two-stage upscale" in line and "selected AI model" in line for line in logs)
 
 
 def test_ultimate_off_executes_one_global_pass_and_never_calls_tile_refinement():
@@ -241,6 +244,9 @@ def test_ultimate_scale_is_applied_after_enhance_scale_and_one_x_still_refines_t
 
         engine._enhance_with_retries = fake_global  # type: ignore[method-assign]
         engine._qwen_detail_refine_large_output = fake_tile_refiner  # type: ignore[method-assign]
+        engine._upscale_image_with_selected_model = (
+            lambda image, options, target_size: image.resize(target_size, Image.Resampling.BICUBIC)
+        )
         result = engine._enhance_qwen_output(
             original, "restore texture", 160, 240, 1, "Turbo · 8 steps", 1, 25.0, 18.0, 8,
             detail_mode="ultimate", strength=0.84, tile_strength=0.74,
@@ -255,7 +261,7 @@ def test_ultimate_scale_is_applied_after_enhance_scale_and_one_x_still_refines_t
     assert one_global == [(160, 256)] and two_global == [(64, 128)]
     assert one_x.size == (160, 240) and one_tiles == [(160, 240)]
     assert two_x.size == (160, 240) and two_tiles == [(160, 240)]
-    assert any("Lanczos Ultimate scale 2×" in line for line in two_logs)
+    assert any("selected AI model" in line for line in two_logs)
 
 
 def test_realesrgan_models_automatically_run_at_their_native_scale(tmp_path):
