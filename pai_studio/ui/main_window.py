@@ -405,11 +405,11 @@ class App(QMainWindow):
             "ultimate_qwen_steps": self.ultimate_qwen_steps_spin.value() if hasattr(self, "ultimate_qwen_steps_spin") else int(self.settings.get("ultimate_qwen_steps", 8)),
             "ultimate_qwen_scale": int(self.ultimate_qwen_scale_combo.currentData()) if hasattr(self, "ultimate_qwen_scale_combo") and self.ultimate_qwen_scale_combo.currentData() is not None else int(self.settings.get("ultimate_qwen_scale", 2)),
             "watermark_removal_enabled": bool(self.btn_watermark_toggle.isChecked()) if hasattr(self, "btn_watermark_toggle") else bool(self.settings.get("watermark_removal_enabled", False)),
-            "auto_realesrgan_enabled": self.btn_auto_realesrgan.isChecked() if hasattr(self, "btn_auto_realesrgan") else bool(self.settings.get("auto_realesrgan_enabled", False)),
+            "auto_realesrgan_enabled": False,  # Real upscaling is now part of the single Ultimate toggle, not a second post-process.
             "qwen_preview_enabled": bool(self.settings.get("qwen_preview_enabled", True)),
             "preview_mode": str(getattr(self, "_preferred_preview_mode", self.settings.get("preview_mode", "Side by side"))),
             "qwen_detail_profile": self._selected_qwen_detail_profile() if hasattr(self, "qwen_detail_profile_buttons") else str(self.settings.get("qwen_detail_profile", "balanced")),
-            # Real-ESRGAN auto chaining is controlled only by the explicit global toolbar toggle.
+            # The selected learned upscaler runs inside Ultimate, not as an automatic second pass.
             "upscale_enabled": False,
             "upscale_model": self.upscale_model_combo.currentData() if hasattr(self, "upscale_model_combo") else "realesrgan-x4plus",
             "upscale_tile": int(self.upscale_tile_combo.currentData()) if hasattr(self, "upscale_tile_combo") and self.upscale_tile_combo.currentData() is not None else 0,
@@ -544,16 +544,14 @@ class App(QMainWindow):
         outer.addLayout(workflow_row)
         # Compact switches are rendered inside Basic for Enhance/Close-up/Square and
         # inside the matching Generate/Edit studio panels. They share one live state.
-        self._feature_toggle_buttons = {"ultimate": [], "esrgan": [], "lora": [], "watermark": []}
+        self._feature_toggle_buttons = {"ultimate": [], "lora": [], "watermark": []}
         self.btn_ultimate_toggle = self._make_feature_toggle_button("ultimate")
-        self.btn_auto_realesrgan = self._make_feature_toggle_button("esrgan")
         self.btn_lora_toggle = self._make_feature_toggle_button("lora")
         self.btn_watermark_toggle = self._make_feature_toggle_button("watermark")
         workflow_feature_row = QHBoxLayout()
         workflow_feature_row.setContentsMargins(0, 0, 0, 0)
         workflow_feature_row.setSpacing(5)
-        for feature_button in (self.btn_ultimate_toggle, self.btn_auto_realesrgan,
-                               self.btn_lora_toggle, self.btn_watermark_toggle):
+        for feature_button in (self.btn_ultimate_toggle, self.btn_lora_toggle, self.btn_watermark_toggle):
             workflow_feature_row.addWidget(feature_button, 1)
         self.workflow_feature_row = workflow_feature_row
 
@@ -1308,11 +1306,11 @@ class App(QMainWindow):
         model_preset_layout.addWidget(self.std_quality)
 
         # Real-ESRGAN/Real-ESRNet is a separate task; an explicit workflow toggle may chain it after Qwen.
-        self.realesrgan_box = QGroupBox("AI Upscaler · Real-ESRGAN / Real-ESRNet")
+        self.realesrgan_box = QGroupBox("Ultimate · Selected AI Upscaler Model")
         real_layout = QVBoxLayout(self.realesrgan_box)
         real_layout.setContentsMargins(8, 8, 8, 8)
         real_layout.setSpacing(6)
-        real_note = QLabel("Use manually or switch ESRGAN ON in the workflow to run after generation. Each model automatically upscales at its native scale.")
+        real_note = QLabel("The selected learned upscaler is used inside Ultimate between the first Qwen pass and the final Qwen tile-refinement pass. The same selection is available for a standalone upscale job.")
         real_note.setWordWrap(True)
         real_layout.addWidget(real_note)
         real_form = QFormLayout()
@@ -1324,24 +1322,24 @@ class App(QMainWindow):
         selected_model_index = self.upscale_model_combo.findData(selected_model)
         self.upscale_model_combo.setCurrentIndex(selected_model_index if selected_model_index >= 0 else 0)
         self.upscale_model_combo.setMinimumWidth(0)
-        self.upscale_model_combo.setToolTip("Photo: Real-ESRGAN x4plus (4×). Conservative restoration: Real-ESRNet (4×). Anime: Real-ESRGAN anime (4×) or AnimeVideo-v3 (4×/3×/2×). Runs automatically at the selected model's native scale.")
+        self.upscale_model_combo.setToolTip("Choose Real-ESRGAN, Real-ESRNet, or a curated community NCNN model for the Ultimate AI upscale stage. Models run at their trained native scale.")
         real_form.addRow("Upscaler model", self.upscale_model_combo)
         self.upscale_tile_combo = QComboBox()
-        for label, value in (("Auto tile", 0), ("Tile 128", 128), ("Tile 256", 256), ("Tile 384", 384), ("Tile 512", 512)):
+        for label, value in (("Auto tile", 0), ("Tile 128", 128), ("Tile 200", 200), ("Tile 256", 256), ("Tile 384", 384), ("Tile 512", 512), ("Tile 600", 600)): 
             self.upscale_tile_combo.addItem(label, value)
         tile_idx = self.upscale_tile_combo.findData(int(self.settings.get("upscale_tile", 0)))
         self.upscale_tile_combo.setCurrentIndex(tile_idx if tile_idx >= 0 else 0)
         self.upscale_tile_combo.setMinimumWidth(0)
-        self.upscale_tile_combo.setToolTip("Smaller tiles reduce VRAM use; Auto delegates tile sizing to the engine.")
+        self.upscale_tile_combo.setToolTip("Upscaler tile size in pixels. Use 200 or 256 for lower VRAM, 512 or 600 for fewer tiles on a larger GPU, or Auto for backend selection.")
         real_form.addRow("Tile size", self.upscale_tile_combo)
         real_layout.addLayout(real_form)
         self.upscale_tta_check = QCheckBox("TTA (slower, may improve some images)")
         self.upscale_tta_check.setChecked(bool(self.settings.get("upscale_tta", False)))
         self.upscale_tta_check.setToolTip("Test-time augmentation is slower and may help some images.")
         real_layout.addWidget(self.upscale_tta_check)
-        self.btn_upscale_selected = QPushButton("Run AI Upscale")
+        self.btn_upscale_selected = QPushButton("Run Selected Upscaler")
         self.btn_upscale_selected.setMinimumHeight(32)
-        self.btn_upscale_selected.setToolTip("Run the selected NCNN/Vulkan Real-ESRGAN or Real-ESRNet model at its native scale as a separate image-processing task. Qwen Enhance does not call it automatically.")
+        self.btn_upscale_selected.setToolTip("Run the selected Real-ESRGAN / Real-ESRNet / community NCNN model on the selected image without loading Qwen. Ultimate uses this same model automatically when its toggle is enabled.")
         self.btn_upscale_selected.clicked.connect(self.upscale_selected_image)
         real_layout.addWidget(self.btn_upscale_selected)
         # Runtime install status and download action are part of Model Catalog.
@@ -2108,7 +2106,7 @@ class App(QMainWindow):
 
     def _feature_toggle_label(self, feature: str, enabled: Optional[bool] = None) -> str:
         # Keep the label fixed; the checked state is communicated by color only.
-        names = {"ultimate": "▦ Ultimate", "esrgan": "↗ ESRGAN", "lora": "◎ LoRA", "watermark": "◌ Watermark"}
+        names = {"ultimate": "▦ Ultimate", "lora": "◎ LoRA", "watermark": "◌ Watermark"}
         return names.get(feature, feature)
 
     def _feature_default(self, feature: str) -> bool:
@@ -2126,14 +2124,12 @@ class App(QMainWindow):
         button.setMaximumHeight(30)
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         tooltips = {
-            "ultimate": "ON: run overlap-aware Qwen tile refinement. Configure output scale, coverage, and denoise in Model Catalog.",
-            "esrgan": "ON: run the selected Real-ESRGAN / Real-ESRNet automatically after this workflow. Configure it in Model Catalog.",
+            "ultimate": "ON: run the selected learned AI upscaler and then full-coverage Qwen tile refinement. Choose the upscaler in Model Catalog → Ultimate.",
             "lora": "Enable or disable the selected local LoRA adapter. Choose the file and strength in Model Catalog.",
             "watermark": "ON: ask the local Qwen model to remove visible watermark overlays and reconstruct the underlying texture in Image Edit, Enhance, Close-up and Square 1:1. OFF leaves watermarks untouched. Complex overlaps are not guaranteed to be removable cleanly.",
         }
         button.setToolTip(tooltips[feature])
-        # Keep a cool blue enabled state consistent with the rest of the studio; all four
-        # controls share the available width and never append noisy ON/OFF text.
+        # Keep a cool blue enabled state consistent with the studio; the unified Ultimate, LoRA, and Watermark controls share the available width.
         button.setStyleSheet(
             "QToolButton { border: 1px solid #465568; border-radius: 8px; "
             "padding: 3px 3px; background: #252e3a; color: #d2dae5; font-weight: 500; } "
@@ -2149,7 +2145,7 @@ class App(QMainWindow):
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(4)
-        for feature in ("ultimate", "esrgan", "lora", "watermark"):
+        for feature in ("ultimate", "lora", "watermark"):
             row.addWidget(self._make_feature_toggle_button(feature), 1)
         return row
 
@@ -2192,6 +2188,9 @@ class App(QMainWindow):
             self.enhance_detail_mode.blockSignals(False)
         self.settings["enhance_detail_mode"] = "ultimate" if enabled else "fast"
         self.settings["ultimate_qwen_upscale_enabled"] = bool(enabled)
+        # Clear the old independent ESRGAN switch: the selected model is used only
+        # inside this single Ultimate pipeline, avoiding a duplicate AI upscale pass.
+        self.settings["auto_realesrgan_enabled"] = False
         self.schedule_save()
 
     def _global_realesrgan_toggled(self, enabled: bool, source=None):
@@ -3536,7 +3535,7 @@ class App(QMainWindow):
         """Return Real-ESRGAN options (native model scale) and the explicit optional post-process toggle."""
         return {
             "upscale_enabled": False,
-            "auto_realesrgan_enabled": bool(self.btn_auto_realesrgan.isChecked()) if hasattr(self, "btn_auto_realesrgan") else bool(self.settings.get("auto_realesrgan_enabled", False)),
+            "auto_realesrgan_enabled": False,  # Legacy post-process kept off to prevent a second upscale after Ultimate.
             "upscale_model": str(self.upscale_model_combo.currentData() or "realesrgan-x4plus"),
             "upscale_tile": int(self.upscale_tile_combo.currentData() if self.upscale_tile_combo.currentData() is not None else 0),
             "upscale_tta": bool(self.upscale_tta_check.isChecked()),
