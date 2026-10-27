@@ -497,7 +497,7 @@ class App(QMainWindow):
             workflow_row.addWidget(button, 1)
             self.workflow_buttons.append((button, mode))
         self.btn_download_model = QPushButton("🧩 Model Catalog")
-        self.btn_download_model.setToolTip("Model files, AI Upscaler, Ultimate refinement and LoRA settings")
+        self.btn_download_model.setToolTip("Model files, Ultimate learned upscaler and tile refinement, and LoRA settings")
         self.btn_download_model.clicked.connect(self.download_model_bundle)
         top.addWidget(self.btn_download_model)
         self.btn_show_left_dock = QToolButton()
