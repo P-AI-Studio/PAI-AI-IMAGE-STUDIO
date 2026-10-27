@@ -1931,7 +1931,7 @@ class App(QMainWindow):
         self._encoder_cpu_auto = False
         self.schedule_save()
 
-    def download_model_bundle(self):
+    def download_model_bundle(self) -> bool:
         if self.worker and self.worker.isRunning():
             QMessageBox.information(self, "Processing active", "Stop image processing before downloading or repairing model files.")
             return
@@ -1957,6 +1957,8 @@ class App(QMainWindow):
             self.save_settings()
             self.statusBar().showMessage("Model choices saved. Load Selected Models to use the chosen components offline.")
             self.log_message(f"Model selection saved at {target.resolve()}")
+            return True
+        return False
 
     def browse_model_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select local model components folder", self.model_path_edit.text() or str(MODEL_DIR))
@@ -2023,7 +2025,10 @@ class App(QMainWindow):
                     QMessageBox.StandardButton.Yes,
                 )
                 if answer == QMessageBox.StandardButton.Yes:
-                    self.download_model_bundle()
+                    # Continue through the setup stages only if the user completed
+                    # download/verification in Model Catalog.
+                    if self.download_model_bundle():
+                        self.load_model_async()
                 else:
                     self.statusBar().showMessage("Model setup incomplete · open Model Catalog to download/verify components.")
                 return
