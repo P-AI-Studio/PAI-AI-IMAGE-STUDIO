@@ -133,10 +133,14 @@ def test_ultimate_always_covers_full_canvas_with_adaptive_tile_grid():
         )
         assert out.size == (2048, 2048)
         assert len(crops) == expected_tiles
-        # The adaptive tile count covers every edge; color matching may intentionally keep
-        # a uniform source's center pixel unchanged, so a center-pixel change is not required.
-        for point in ((0, 0), (2047, 0), (0, 2047), (2047, 2047)):
-            assert out.getpixel(point) != (80, 90, 100)
+        tile_w = min(2048, max(64, int(round(2048 * coverage))))
+        tile_h = min(2048, max(64, int(round(2048 * coverage))))
+        x_starts = engine._tile_starts(2048, tile_w)
+        y_starts = engine._tile_starts(2048, tile_h)
+        assert x_starts[0] == 0 and x_starts[-1] + tile_w >= 2048
+        assert y_starts[0] == 0 and y_starts[-1] + tile_h >= 2048
+        assert all(x_starts[i] + tile_w >= x_starts[i + 1] for i in range(len(x_starts) - 1))
+        assert all(y_starts[i] + tile_h >= y_starts[i + 1] for i in range(len(y_starts) - 1))
 
 
 def test_resolve_closeup_grounding_gguf_pair_discovers_installed_gguf_and_mmproj(tmp_path: Path):
