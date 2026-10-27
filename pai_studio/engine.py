@@ -2810,13 +2810,13 @@ class LocalEngine:
                     if max(job.width, job.height) > MAX_INFERENCE_SIDE or profile_key in {"balanced", "strong", "maximum"}:
                         if ultimate_enabled:
                             target_sz = (int(job.width), int(job.height))
-                            if target_sz != result.size:
-                                self.log(
-                                    f"Image Generate Ultimate two-stage upscale · Pass 1 Qwen at {gen_stage1_size[0]}×{gen_stage1_size[1]} → "
-                                    f"Lanczos {ult_scale}× upscale to {target_sz[0]}×{target_sz[1]} → 4-tile Ultimate refinement."
-                                )
-                                result = result.resize(target_sz, Image.Resampling.LANCZOS)
-                                self._publish_live_preview(result, marker=("generate-stage-1-then-scale", gen_stage1_size[0], gen_stage1_size[1], target_sz[0], target_sz[1]))
+                            self.log(
+                                f"Image Generate Ultimate · Qwen stage-1 at {result.width}×{result.height} → "
+                                f"selected AI upscaler {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → "
+                                f"{target_sz[0]}×{target_sz[1]} → full-coverage Qwen tile refinement."
+                            )
+                            result = self._upscale_image_with_selected_model(result, job.custom, target_sz)
+                            self._publish_live_preview(result, marker=("generate-stage-1-ai-upscale", gen_stage1_size[0], gen_stage1_size[1], target_sz[0], target_sz[1]))
                         result = self._qwen_detail_refine_large_output(
                             result, effective_prompt, current_seed + 1000, job.quality, steps,
                             detail_mode="ultimate" if bool(job.custom.get("ultimate_qwen_upscale_enabled", False)) else "fast", use_img2img=True, tile_strength=profile_tile_strength,
@@ -2862,13 +2862,13 @@ class LocalEngine:
                 if max(job.width, job.height) > MAX_INFERENCE_SIDE or profile_key in QWEN_DETAIL_PROFILES:
                     if ultimate_enabled:
                         target_sz = (int(job.width), int(job.height))
-                        if target_sz != result.size:
-                            self.log(
-                                f"Image Edit Ultimate two-stage upscale · Pass 1 Qwen at {edit_stage1_size[0]}×{edit_stage1_size[1]} → "
-                                f"Lanczos {ult_scale}× upscale to {target_sz[0]}×{target_sz[1]} → 4-tile Ultimate refinement."
-                            )
-                            result = result.resize(target_sz, Image.Resampling.LANCZOS)
-                            self._publish_live_preview(result, marker=("edit-stage-1-then-scale", edit_stage1_size[0], edit_stage1_size[1], target_sz[0], target_sz[1]))
+                        self.log(
+                            f"Image Edit Ultimate · Qwen stage-1 at {result.width}×{result.height} → "
+                            f"selected AI upscaler {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → "
+                            f"{target_sz[0]}×{target_sz[1]} → full-coverage Qwen tile refinement."
+                        )
+                        result = self._upscale_image_with_selected_model(result, job.custom, target_sz)
+                        self._publish_live_preview(result, marker=("edit-stage-1-ai-upscale", edit_stage1_size[0], edit_stage1_size[1], target_sz[0], target_sz[1]))
                     result = self._qwen_detail_refine_large_output(
                         result, effective_prompt, edit_seed + 1000, job.quality, steps,
                         detail_mode="ultimate" if bool(job.custom.get("ultimate_qwen_upscale_enabled", False)) else "fast", use_img2img=True, tile_strength=profile_tile_strength,
@@ -2928,7 +2928,8 @@ class LocalEngine:
                     float(job.custom.get("warn_diff", 18.0)), steps,
                     detail_mode, strength=profile_strength,
                     tile_strength=profile_tile_strength, detail_profile=profile_key,
-                    ultimate_scale=int(job.custom.get("ultimate_qwen_scale", 2) or 2) if ultimate_enabled else 1)
+                    ultimate_scale=int(job.custom.get("ultimate_qwen_scale", 2) or 2) if ultimate_enabled else 1,
+                    upscale_options=job.custom)
                 path = out_dir / f"enhance_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.png"
                 detail_metadata = qwen_detail_refinement_metadata(profile_key, detail_mode)
                 if detail_mode == "ultimate":
@@ -3146,13 +3147,13 @@ class LocalEngine:
                 if bool(job.custom.get("ultimate_qwen_upscale_enabled", False)):
                     profile_key = str(job.custom.get("qwen_detail_profile", "balanced"))
                     _profile_strength, profile_tile_strength = qwen_detail_profile_values(profile_key)
-                    if result.size != (final_side, final_side):
-                        self.log(
-                            f"Close-up Ultimate two-stage upscale · Pass 1 Qwen at {side}×{side} → "
-                            f"Lanczos {closeup_ult_scale}× upscale to {final_side}×{final_side} → 4-tile Ultimate refinement & seamless stitch."
-                        )
-                        result = result.resize((final_side, final_side), Image.Resampling.LANCZOS)
-                        self._publish_live_preview(result, marker=("closeup-stage-1-then-scale", side, final_side))
+                    self.log(
+                        f"Close-up Ultimate · Qwen stage-1 at {result.width}×{result.height} → "
+                        f"selected AI upscaler {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → "
+                        f"{final_side}×{final_side} → full-coverage Qwen detail refinement."
+                    )
+                    result = self._upscale_image_with_selected_model(result, job.custom, (final_side, final_side))
+                    self._publish_live_preview(result, marker=("closeup-stage-1-ai-upscale", side, final_side))
                     self.log(
                         f"Close-up · running Model Catalog Ultimate Qwen refinement "
                         f"(denoise={self._active_ultimate_denoise_strength:.2f}, coverage={self._active_ultimate_tile_coverage:.0%}, "
@@ -3332,17 +3333,20 @@ class LocalEngine:
                         raise Aborted()
                     profile_key = str(job.custom.get("qwen_detail_profile", "balanced"))
                     _profile_strength, profile_tile_strength = qwen_detail_profile_values(profile_key)
-                    if result.size != (final_side, final_side):
-                        self.log(f"Square 1:1 Ultimate two-stage upscale · Stage-1 Qwen output {side}×{side} → Lanczos {square_ult_scale}× upscale to {final_side}×{final_side} → 4-tile refinement.")
-                        result = result.resize((final_side, final_side), Image.Resampling.LANCZOS)
-                        if mode == "outpaint" and source_original is not None:
-                            _, _, final_margins = plan_square_outpaint(source_original, final_side)
-                            if final_margins is not None:
-                                result = composite_square_outpaint_result(
-                                    source_original, result, final_side, final_margins,
-                                    enhance=bool(job.enhance), feather=max(16, min(64, final_side // 24)),
-                                )
-                        self._publish_live_preview(result, marker=("square-stage-1-then-scale", side, final_side))
+                    self.log(
+                        f"Square 1:1 Ultimate · Qwen stage-1 at {result.width}×{result.height} → "
+                        f"selected AI upscaler {str(job.custom.get('upscale_model', 'realesrgan-x4plus'))} → "
+                        f"{final_side}×{final_side} → full-coverage Qwen refinement."
+                    )
+                    result = self._upscale_image_with_selected_model(result, job.custom, (final_side, final_side))
+                    if mode == "outpaint" and source_original is not None:
+                        _, _, final_margins = plan_square_outpaint(source_original, final_side)
+                        if final_margins is not None:
+                            result = composite_square_outpaint_result(
+                                source_original, result, final_side, final_margins,
+                                enhance=bool(job.enhance), feather=max(16, min(64, final_side // 24)),
+                            )
+                    self._publish_live_preview(result, marker=("square-stage-1-ai-upscale", side, final_side))
                     self.log("Square 1:1 · Ultimate Qwen refinement is running on the completed final square output, after joint outpainting and source-core compositing.")
                     self.status_callback("Ultimate Qwen output refinement · final square image · overlapping tile pass…")
                     result = self._qwen_detail_refine_large_output(
@@ -3369,7 +3373,9 @@ class LocalEngine:
                 source_file.close()
         # Optional user-controlled Real-ESRGAN/Real-ESRNet post-process, independent from Qwen.
         # It runs only when the small global toolbar toggle was ON when the job was queued.
-        if bool(job.custom.get("auto_realesrgan_enabled", False)) and outputs and job.workflow != "upscale_only":
+        if (bool(job.custom.get("auto_realesrgan_enabled", False))
+                and not bool(job.custom.get("ultimate_qwen_upscale_enabled", False))
+                and outputs and job.workflow != "upscale_only"):
             original_outputs = list(outputs)
             self.log("Global ESRGAN toggle is ON · running the selected standalone Vulkan upscaler on workflow outputs.")
             for upscale_index, produced in enumerate(original_outputs, start=1):
