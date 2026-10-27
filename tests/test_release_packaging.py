@@ -15,6 +15,11 @@ def test_release_builder_keeps_large_native_runtime_out_of_installer():
     assert "sd-server.exe" not in script
     assert "Copy-Item -Path (Join-Path $BinaryExtract '*')" not in script
     assert "if (Test-Path -LiteralPath $RuntimeDir)" in script
+    assert "Copy-Item (Join-Path $ProjectRoot 'LICENSE') -Destination $DistDir -Force" in script
+    assert "Copy-Item (Join-Path $ProjectRoot 'licenses\\THIRD_PARTY_NOTICES.txt') -Destination $DistDir -Force" in script
+    for non_runtime_doc in ("README.md", "README_FA.md", "CHANGELOG.md"):
+        assert f"Copy-Item (Join-Path $ProjectRoot '{non_runtime_doc}')" not in script
+    assert "Copy-Item (Join-Path $ProjectRoot 'VERSION') -Destination $DistDir" not in script
 
     # The installed app still performs the pinned download, size/hash checks,
     # safe extraction and install-time progress reporting.
