@@ -2,6 +2,14 @@
 
 All notable changes to **P.AI AI Image Studio** are documented in this file.
 
+## [1.0.0-beta.2] — Version 1 Beta hotfix (2026-10-27)
+
+- **Installer build:** Replace the fragile `Get-FileHash` command dependency with direct .NET SHA-256 hashing for native runtime integrity checks.
+- **Release CI:** Run the Windows installer build directly under PowerShell and on pull requests, so packaging failures are caught before tagging a release.
+- **Version consistency:** Read the application version from `VERSION` and use it for the Inno Setup output filename.
+- **Safe publishing:** Remove force-push and force-tag behavior; refuse to overwrite an existing release tag and let GitHub Actions publish the installer.
+- **Release hygiene:** Remove a cached diagnostic log from the source ZIP and remove hard-coded automated-test totals from the documentation.
+
 ## [1.0.0-beta.1] — Version 1 Beta (2026-10-25)
 
 ### Highlights & Core Engine Architecture
@@ -22,4 +30,4 @@ All notable changes to **P.AI AI Image Studio** are documented in this file.
 ### Workflows, Preview & Validation
 - **Six Integrated Workflows:** Image Generate, Image Edit, Enhance / Upscale (`Balanced`, `Strong`, `Maximum` profiles), Close-up / Smart Zoom (Qwen3-VL semantic grounding + interactive manual click focus), Square 1:1 Outpaint, and standalone Real-ESRGAN / Real-ESRNet super-resolution.
 - **Interactive 7-Mode Comparison Canvas:** Original, Enhanced, Slider, Side by Side, Overlay, Difference, and Flicker modes.
-- **Comprehensive Test Suite:** Verified with 299 automated unit, validation, regression, and release-smoke tests (`tests/`).
+- **Comprehensive Test Suite:** Includes automated unit, validation, regression, and release-smoke tests in `tests/`; the exact count is reported by CI and may change over time.
