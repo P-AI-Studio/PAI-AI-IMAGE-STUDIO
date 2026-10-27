@@ -2,6 +2,12 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 set "ROOT=%~dp0"
+set /p VERSION=<"%ROOT%VERSION"
+if not defined VERSION (
+  echo VERSION file is empty or missing.
+  pause
+  exit /b 1
+)
 set "ISCC="
 for /f "delims=" %%P in ('where ISCC.exe 2^>nul') do if not defined ISCC set "ISCC=%%P"
 if not defined ISCC if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
@@ -19,7 +25,7 @@ if errorlevel 1 (
   pause
   exit /b 3
 )
-if not exist "%ROOT%dist-installer\PAI-AI-Image-Studio-Setup-1.0.0-beta.1.exe" (
+if not exist "%ROOT%dist-installer\PAI-AI-Image-Studio-Setup-%VERSION%.exe" (
   echo The build finished, but the expected Setup executable is missing.
   echo Check build_release.ps1 and the Inno Setup compiler output.
   pause
@@ -27,6 +33,6 @@ if not exist "%ROOT%dist-installer\PAI-AI-Image-Studio-Setup-1.0.0-beta.1.exe" (
 )
 echo.
 echo Setup created successfully:
-echo %ROOT%dist-installer\PAI-AI-Image-Studio-Setup-1.0.0-beta.1.exe
+echo %ROOT%dist-installer\PAI-AI-Image-Studio-Setup-%VERSION%.exe
 pause
 endlocal
