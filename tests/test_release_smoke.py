@@ -1100,7 +1100,7 @@ def test_enhance_large_output_runtime_invariant_keeps_requested_dimensions():
     tree = ast.parse(source)
     class_node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "LocalEngine")
     method_node = next(n for n in class_node.body if isinstance(n, ast.FunctionDef) and n.name == "_enhance_qwen_output")
-    namespace = {"Image": Image, "MAX_INFERENCE_SIDE": 2048, "MAX_OUTPUT_SIDE": 8192, "Optional": __import__('typing').Optional}
+    namespace = {"Image": Image, "MAX_INFERENCE_SIDE": 2048, "MAX_OUTPUT_SIDE": 8192, "Optional": __import__('typing').Optional, "Any": __import__('typing').Any}
     exec(compile(ast.Module(body=[method_node], type_ignores=[]), "<enhance-size-regression>", "exec"), namespace)
 
     class FakeEngine:
@@ -1899,7 +1899,7 @@ def test_square_reference_mode_is_propagated_to_high_resolution_tiles():
     tree = ast.parse(source)
     class_node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "LocalEngine")
     method = next(n for n in class_node.body if isinstance(n, ast.FunctionDef) and n.name == "_enhance_qwen_output")
-    namespace = {"Image": Image, "MAX_INFERENCE_SIDE": 2048, "MAX_OUTPUT_SIDE": 8192, "Optional": __import__('typing').Optional}
+    namespace = {"Image": Image, "MAX_INFERENCE_SIDE": 2048, "MAX_OUTPUT_SIDE": 8192, "Optional": __import__('typing').Optional, "Any": __import__('typing').Any}
     exec(compile(ast.Module(body=[method], type_ignores=[]), "<square-refinement-mode>", "exec"), namespace)
 
     class FakeEngine:
@@ -2011,7 +2011,8 @@ def test_enhance_scale_is_stage_one_and_ultimate_uses_selected_learned_model_for
     enhance = source[source.index('elif job.workflow == "enhance":'):source.index('elif job.workflow == "lora_closeup_1024":')]
     assert 'ultimate_scale=int(job.custom.get("ultimate_qwen_scale", 2) or 2) if ultimate_enabled else 1' in enhance
     assert 'upscale_options=job.custom' in enhance
-    assert 'self._upscale_image_with_selected_model(' in enhance
+    helper = source[source.index('    def _enhance_qwen_output'):source.index('    def process(self, job: Job)')]
+    assert 'self._upscale_image_with_selected_model(' in helper
     assert 'stage_result.resize((requested_width, requested_height), Image.Resampling.LANCZOS)' not in source
 
 def test_qwen_detail_profiles_keep_current_default_and_offer_stronger_modes():
@@ -2220,7 +2221,7 @@ def test_profile_prompts_are_distinct_and_maximum_runs_two_real_refinement_calls
     assert result.size == sample.size
     assert len(engine.calls) == 4
     assert all(call["strength"] == 0.72 for call in engine.calls)
-    assert any("overlapping tiles" in message.lower() or "qwen 4-tile" in message.lower() for message in engine.logs)
+    assert any("full-coverage" in message.lower() or "ultimate tile refinement" in message.lower() for message in engine.logs)
 
 
 def test_queue_and_input_files_are_first_for_enhance_closeup_and_square():
@@ -2243,7 +2244,9 @@ def test_real_esrgan_is_integrated_into_ultimate_and_available_as_standalone_act
     assert 'show_realesrgan_settings' not in source
     process = source[source.index('    def process(self, job: Job)'):source.index('class Worker(QThread)')]
     enhance_segment = process[process.index('elif job.workflow == "enhance"'):process.index('elif job.workflow == "lora_closeup_1024"')]
-    assert 'self._upscale_image_with_selected_model(' in enhance_segment
+    assert 'upscale_options=job.custom' in enhance_segment
+    helper = source[source.index('    def _enhance_qwen_output'):source.index('    def process(self, job: Job)')]
+    assert 'self._upscale_image_with_selected_model(' in helper
     assert 'if job.workflow == "upscale_only"' in source
 
 def test_watermark_toggle_is_opt_in_and_wired_to_supported_ai_workflows():
